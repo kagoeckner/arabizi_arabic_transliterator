@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arabizi Transliteration Demo</title>
+  <style>
+    :root {
+      --bg: #f7f7f7;
+      --panel: #ffffff;
+      --text: #111111;
+      --muted: #6b7280;
+      --border: #d8d8d8;
+      --shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Arial, Helvetica, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .page {
+      width: min(1260px, calc(100% - 40px));
+      margin: 10px auto 22px;
+    }
+
+    .hero,
+    .dialect-section {
+      background: #f3f3f3;
+      border: 1px solid #cfcfcf;
+      border-radius: 22px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero { margin-bottom: 18px; }
+
+    .hero-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .brand-badge {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: #111111;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.35rem;
+      font-weight: 700;
+      flex: 0 0 40px;
+    }
+
+    .hero-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .top-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .field { margin-bottom: 14px; }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 0.95rem;
+      color: #5b5b5b;
+      font-weight: 500;
+    }
+
+    select,
+    textarea {
+      width: 100%;
+      border: 1px solid #cfcfcf;
+      background: #ffffff;
+      color: var(--text);
+      border-radius: 16px;
+      padding: 14px 16px;
+      font: inherit;
+      outline: none;
+    }
+
+    select:focus,
+    textarea:focus {
+      border-color: #111111;
+    }
+
+    .top-controls label,
+    .status {
+      display: none;
+    }
+
+    .translator-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .left-column {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .right-column {
+      min-width: 0;
+    }
+
+    .panel {
+      background: #ffffff;
+      border: 1px solid #cfcfcf;
+      border-radius: 20px;
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid #d8d8d8;
+      background: #ffffff;
+      flex: 0 0 auto;
+    }
+
+    .panel-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #111111;
+    }
+
+    .panel-subtitle {
+      font-size: 0.92rem;
+      color: #6b7280;
+    }
+
+    textarea.main-input {
+      border: 0;
+      border-radius: 0;
+      min-height: 300px;
+      resize: none;
+      padding: 18px;
+      background: #ffffff;
+      line-height: 1.7;
+      font-size: 1rem;
+    }
+
+    .output-area {
+      flex: 1 1 auto;
+      min-height: 300px;
+      padding: 18px;
+      background: #ffffff;
+      line-height: 1.7;
+      overflow-y: auto;
+    }
+
+    .candidate-list {
+      margin: 0;
+      padding-left: 20px;
+      line-height: 1.9;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    button.action-btn {
+      border-radius: 16px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid #cfcfcf;
+      background: #ffffff;
+      color: #111111;
+    }
+
+    button.action-btn.primary {
+      background: #111111;
+      color: #ffffff;
+      border-color: #111111;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+
+    .dialect-section-title {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .dialect-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .dialect-card {
+      border: 1px solid #d1d1d1;
+      border-radius: 18px;
+      background: #ececec;
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      color: #8a8a8a;
+      font-weight: 600;
+    }
+
+    .dialect-card.active {
+      background: #ffffff;
+      border-color: #111111;
+      color: #111111;
+    }
+
+    .dialect-pill {
+      font-size: 0.88rem;
+      border-radius: 999px;
+      padding: 6px 12px;
+      border: 1px solid #111111;
+      background: #111111;
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .dialect-card.inactive .dialect-pill {
+      background: transparent;
+      color: #666666;
+      border-color: transparent;
+      padding-right: 0;
+    }
+
+    @media (max-width: 980px) {
+      .translator-shell,
+      .top-controls,
+      .dialect-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .right-column .panel {
+        height: auto !important;
+      }
+
+      .output-area {
+        min-height: 320px;
+      }
+
+      .actions {
+        flex-wrap: wrap;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div class="hero-header">
+        <div class="brand-badge">ع</div>
+        <div class="hero-title">Arabizi ↔ Arabic Translator</div>
+      </div>
+
+      <div class="top-controls">
+        <div class="field">
+          <label for="direction">Translation direction</label>
+          <select id="direction">
+            <option value="Arabizi -> Arabic">Arabizi → Arabic</option>
+            <option value="Arabic -> Arabizi">Arabic → Arabizi</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="dialect">Dialect</label>
+          <select id="dialect">
+            <option value="Palestinian Arabic">Palestinian Arabic</option>
+            <option value="Levantine Arabic" disabled>Levantine Arabic</option>
+            <option value="Egyptian Arabic" disabled>Egyptian Arabic</option>
+            <option value="Gulf Arabic" disabled>Gulf Arabic</option>
+            <option value="Iraqi Arabic" disabled>Iraqi Arabic</option>
+            <option value="Maghrebi Arabic" disabled>Maghrebi Arabic</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="translator-shell">
+        <div class="left-column" id="leftColumn">
+          <div class="panel">
+            <div class="panel-top">
+              <div class="panel-title" id="inputPanelTitle">Arabizi</div>
+              <div class="panel-subtitle" id="inputPanelSubtitle">Type Arabizi text</div>
+            </div>
+            <textarea id="inputText" class="main-input" placeholder="Example: keef halak ya sadiqi?"></textarea>
+          </div>
+
+          <div class="actions">
+            <div class="status" id="statusBox">Ready.</div>
+            <button class="action-btn" id="clearButton">Clear</button>
+            <button class="action-btn" id="copyButton">Copy Output</button>
+            <button class="action-btn primary" id="runButton">Transliterate</button>
+          </div>
+
+          <section class="dialect-section">
+            <div class="dialect-section-title">Dialect options</div>
+            <div class="dialect-grid">
+              <div class="dialect-card active">
+                <span>Palestinian Arabic</span>
+                <span class="dialect-pill">Available</span>
+              </div>
+              <div class="dialect-card inactive">
+                <span>Levantine Arabic</span>
+                <span class="dialect-pill">Coming later</span>
+              </div>
+              <div class="dialect-card inactive">
+                <span>Egyptian Arabic</span>
+                <span class="dialect-pill">Coming later</span>
+              </div>
+              <div class="dialect-card inactive">
+                <span>Gulf Arabic</span>
+                <span class="dialect-pill">Coming later</span>
+              </div>
+              <div class="dialect-card inactive">
+                <span>Iraqi Arabic</span>
+                <span class="dialect-pill">Coming later</span>
+              </div>
+              <div class="dialect-card inactive">
+                <span>Maghrebi Arabic</span>
+                <span class="dialect-pill">Coming later</span>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div class="right-column">
+          <div class="panel" id="outputPanel">
+            <div class="panel-top">
+              <div class="panel-title" id="outputPanelTitle">Arabic</div>
+              <div class="panel-subtitle" id="outputPanelSubtitle">All returned transliterations</div>
+            </div>
+            <div class="output-area">
+              <ol id="candidateList" class="candidate-list"></ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const inputText = document.getElementById("inputText");
+    const direction = document.getElementById("direction");
+    const dialect = document.getElementById("dialect");
+    const runButton = document.getElementById("runButton");
+    const clearButton = document.getElementById("clearButton");
+    const copyButton = document.getElementById("copyButton");
+    const candidateList = document.getElementById("candidateList");
+    const statusBox = document.getElementById("statusBox");
+    const inputPanelTitle = document.getElementById("inputPanelTitle");
+    const inputPanelSubtitle = document.getElementById("inputPanelSubtitle");
+    const outputPanelTitle = document.getElementById("outputPanelTitle");
+    const outputPanelSubtitle = document.getElementById("outputPanelSubtitle");
+    const leftColumn = document.getElementById("leftColumn");
+    const outputPanel = document.getElementById("outputPanel");
+
+    function setStatus(message, isError = false) {
+      statusBox.textContent = message;
+      statusBox.classList.toggle("error", isError);
+    }
+
+    function syncPanelLabels() {
+      if (direction.value === "Arabizi -> Arabic") {
+        inputPanelTitle.textContent = "Arabizi";
+        inputPanelSubtitle.textContent = "Type Arabizi text";
+        outputPanelTitle.textContent = "Arabic";
+        outputPanelSubtitle.textContent = "All returned transliterations";
+        inputText.placeholder = "Example: keef halak ya sadiqi?";
+      } else {
+        inputPanelTitle.textContent = "Arabic";
+        inputPanelSubtitle.textContent = "Type Arabic text";
+        outputPanelTitle.textContent = "Arabizi";
+        outputPanelSubtitle.textContent = "All returned transliterations";
+        inputText.placeholder = "مثال: كيف حالك يا صديقي؟";
+      }
+      equalizeHeights();
+    }
+
+    function equalizeHeights() {
+      if (window.innerWidth <= 980) {
+        outputPanel.style.height = "auto";
+        return;
+      }
+      outputPanel.style.height = "auto";
+      const leftHeight = leftColumn.offsetHeight;
+      outputPanel.style.height = `${leftHeight}px`;
+    }
+
+    function renderCandidates(candidates) {
+      candidateList.innerHTML = "";
+      if (!candidates || candidates.length === 0) return;
+
+      candidates.forEach((candidate) => {
+        const li = document.createElement("li");
+        li.textContent = candidate;
+        candidateList.appendChild(li);
+      });
+      equalizeHeights();
+    }
+
+    function getPlaceholderResult(text, selectedDirection, k) {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return {
+          candidates: [],
+          status: "Please enter some text first."
+        };
+      }
+
+      let base;
+      if (selectedDirection === "Arabizi -> Arabic") {
+        base = `[placeholder Arabic output for: ${trimmed}]`;
+      } else {
+        base = `[placeholder Arabizi output for: ${trimmed}]`;
+      }
+
+      const candidates = Array.from({ length: Math.max(10, k) }, (_, i) => `${base} ${i + 1}`);
+      return {
+        candidates,
+        status: "Running in placeholder mode. Connect your backend to return real predictions."
+      };
+    }
+
+    async function callBackend(payload) {
+      const response = await fetch("http://127.0.0.1:8000/transliterate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || "Backend request failed.");
+      }
+
+  return await response.json();
+    }
+
+    async function runTransliteration() {
+      const payload = {
+        text: inputText.value,
+        direction: direction.value,
+        dialect: dialect.value,
+        top_k: 10
+      };
+
+      if (!payload.text.trim()) {
+        setStatus("Please enter some text first.", true);
+        renderCandidates([]);
+        return;
+      }
+
+      runButton.disabled = true;
+      setStatus("Running transliteration...");
+
+      try {
+        const result = await callBackend(payload);
+        renderCandidates(result.candidates || []);
+        setStatus(result.status || "Done.");
+      } catch (error) {
+        console.error(error);
+        renderCandidates([]);
+        setStatus(`Error: ${error.message}`, true);
+      } finally {
+        runButton.disabled = false;
+        equalizeHeights();
+      }
+    }
+
+    function clearAll() {
+      inputText.value = "";
+      direction.value = "Arabizi -> Arabic";
+      dialect.value = "Palestinian Arabic";
+      candidateList.innerHTML = "";
+      syncPanelLabels();
+      setStatus("Cleared.");
+      equalizeHeights();
+    }
+
+    async function copyOutput() {
+      const items = Array.from(candidateList.querySelectorAll("li"))
+        .map((li) => li.textContent.trim())
+        .filter(Boolean);
+      const text = items.join("\n");
+
+      if (!text) {
+        setStatus("Nothing to copy yet.", true);
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus("Output copied to clipboard.");
+      } catch (error) {
+        setStatus("Could not copy output in this browser.", true);
+      }
+    }
+
+    direction.addEventListener("change", syncPanelLabels);
+    runButton.addEventListener("click", runTransliteration);
+    clearButton.addEventListener("click", clearAll);
+    copyButton.addEventListener("click", copyOutput);
+    window.addEventListener("load", equalizeHeights);
+    window.addEventListener("resize", equalizeHeights);
+
+    inputText.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        runTransliteration();
+      }
+    });
+
+    syncPanelLabels();
+    equalizeHeights();
+  </script>
+</body>
+</html>
