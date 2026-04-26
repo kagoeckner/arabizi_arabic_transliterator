@@ -105,6 +105,34 @@
       display: none;
     }
 
+    /* Loading spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner-small {
+      width: 12px;
+      height: 12px;
+      border-width: 1.5px;
+    }
+
+    .loading .spinner-small {
+      border-color: rgba(0,0,0,0.2);
+      border-top-color: #111;
+    }
+
     .translator-shell {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
@@ -418,9 +446,30 @@
       candidateList.innerHTML = "";
       if (!candidates || candidates.length === 0) return;
 
+      // Arabic diacritics (tashkeel) to strip
+      const arabicDiacritics = /[\u064B-\u065F\u0670]/g;
+
+      const seen = new Set();
+      const uniqueCandidates = [];
+
       candidates.forEach((candidate) => {
+        // Strip Arabic diacritics if direction is Arabizi -> Arabic
+        let displayText;
+        if (direction.value === "Arabizi -> Arabic") {
+          displayText = candidate.replace(arabicDiacritics, "");
+        } else {
+          displayText = candidate;
+        }
+
+        // Skip duplicates (same text without diacritics)
+        if (seen.has(displayText)) return;
+        seen.add(displayText);
+        uniqueCandidates.push({ display: displayText, original: candidate });
+      });
+
+      uniqueCandidates.forEach(({ display, original }) => {
         const li = document.createElement("li");
-        li.textContent = candidate;
+        li.textContent = display;
         candidateList.appendChild(li);
       });
       equalizeHeights();
@@ -481,6 +530,8 @@
       }
 
       runButton.disabled = true;
+      runButton.classList.add('loading');
+      runButton.innerHTML = '<span class="spinner spinner-small"></span>Transliterating...';
       setStatus("Running transliteration...");
 
       try {
@@ -493,6 +544,8 @@
         setStatus(`Error: ${error.message}`, true);
       } finally {
         runButton.disabled = false;
+        runButton.classList.remove('loading');
+        runButton.textContent = 'Transliterate';
         equalizeHeights();
       }
     }

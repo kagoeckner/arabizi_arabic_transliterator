@@ -26,6 +26,8 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 MODEL_DIR = Path("models")
 ARABIZI_TO_ARABIC_PATH = MODEL_DIR / "arabizi_to_arabic_website_bundle.pt"
 ARABIC_TO_ARABIZI_PATH = MODEL_DIR / "arabic_to_arabizi_website_bundle.pt"
+ARABIZI_TO_ARABIC_RERANKER_PATH = MODEL_DIR / "arabizi_to_arabic_reranker_best.pt"
+ARABIC_TO_ARABIZI_RERANKER_PATH = MODEL_DIR / "arabic_to_arabizi_reranker_best.pt"
 
 PAD = "<PAD>"
 BOS = "<BOS>"
@@ -188,6 +190,25 @@ class Seq2SeqTransformer(nn.Module):
             memory_key_padding_mask=src_padding_mask,
         )
         return self.output_layer(hidden)
+
+
+class RerankerMLP(nn.Module):
+    """MLP reranker that scores candidates based on various features."""
+    def __init__(self, input_dim: int, hidden_dim: int = 128):
+        super().__init__()
+        # Match the exact layer structure from the saved model (net.0, net.3, net.5)
+        self.net = nn.ModuleDict({
+            "0": nn.Linear(input_dim, hidden_dim),
+            "3": nn.Linear(hidden_dim, hidden_dim),
+            "5": nn.Linear(hidden_dim, 1),
+        })
+        self.relu = nn.ReLU()
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.relu(self.net["0"](x))
+        x = self.relu(self.net["3"](x))
+        x = self.net["5"](x)
+        return x.squeeze(-1)
 
 
 #################################
@@ -373,6 +394,7 @@ def build_model_from_bundle(bundle: Dict[str, Any]) -> Seq2SeqTransformer:
 
 BUNDLES: Dict[str, Dict[str, Any]] = {}
 MODELS: Dict[str, Seq2SeqTransformer] = {}
+RERANKERS: Dict[str, RerankerMLP] = {}
 
 try:
     BUNDLES["arabizi_to_arabic"] = load_bundle(ARABIZI_TO_ARABIC_PATH)
@@ -380,6 +402,28 @@ try:
 
     MODELS["arabizi_to_arabic"] = build_model_from_bundle(BUNDLES["arabizi_to_arabic"])
     MODELS["arabic_to_arabizi"] = build_model_from_bundle(BUNDLES["arabic_to_arabizi"])
+
+    # Load rerankers
+    if ARABIZI_TO_ARABIC_RERANKER_PATH.exists():
+        reranker_bundle = torch.load(ARABIZI_TO_ARABIC_RERANKER_PATH, map_location=DEVICE)
+        reranker = RerankerMLP(
+            input_dim=reranker_bundle["input_dim"],
+            hidden_dim=reranker_bundle.get("hidden_dim", 128)
+        ).to(DEVICE)
+        reranker.load_state_dict(reranker_bundle["model_state_dict"])
+        reranker.eval()
+        RERANKERS["arabizi_to_arabic"] = reranker
+
+    if ARABIC_TO_ARABIZI_RERANKER_PATH.exists():
+        reranker_bundle = torch.load(ARABIC_TO_ARABIZI_RERANKER_PATH, map_location=DEVICE)
+        reranker = RerankerMLP(
+            input_dim=reranker_bundle["input_dim"],
+            hidden_dim=reranker_bundle.get("hidden_dim", 128)
+        ).to(DEVICE)
+        reranker.load_state_dict(reranker_bundle["model_state_dict"])
+        reranker.eval()
+        RERANKERS["arabic_to_arabizi"] = reranker
+
 except Exception as exc:
     # Keep the import error readable in the terminal.
     raise RuntimeError(
@@ -493,7 +537,154 @@ def beam_search_decode_nbest(
     return outputs
 
 
-def predict_candidates(text: str, direction: str, top_k: int = 10) -> List[str]:
+def extract_reranker_features(
+    source: str,
+    candidates: List[tuple],
+    task_name: str,
+    bundle: Dict[str, Any],
+) -> torch.Tensor:
+    """Extract features for the reranker model."""
+    import math
+
+    source_len = len(source)
+    source_digit_count = sum(c.isdigit() for c in source)
+    source_space_count = sum(c.isspace() for c in source)
+    source_vowel_like_count = sum(c in "aeiouAEIOUàáâãäåæèéêëìíîïòóôõöøùúûüýÿ" for c in source)
+    source_has_apostrophe = "'" in source
+    source_has_space = " " in source
+
+    # Get beam scores from candidates (they're already sorted by beam score)
+    beam_scores = [score for _, score in candidates]
+
+    # Normalize beam scores
+    if beam_scores:
+        max_score = max(beam_scores)
+        min_score = min(beam_scores)
+        score_range = max_score - min_score if max_score != min_score else 1.0
+    else:
+        max_score = min_score = score_range = 0
+
+    features = []
+    for rank, (token_ids, score) in enumerate(candidates):
+        # Decode candidate to get text
+        candidate = decode_token_ids(token_ids, bundle["tgt_itos"], "arabic" if task_name == "arabizi_to_arabic" else "arabizi")
+
+        candidate_len = len(candidate)
+        candidate_digit_count = sum(c.isdigit() for c in candidate)
+        candidate_space_count = sum(c.isspace() for c in candidate)
+        candidate_vowel_like_count = sum(c in "aeiouAEIOUàáâãäåæèéêëìíîïòóôõöøùúûüýÿ" for c in candidate)
+        candidate_has_space = " " in candidate
+
+        # Lexical matches (simple character overlap)
+        source_chars = set(source.lower())
+        candidate_chars = set(candidate)
+        arabic_lex_match = sum(1 for c in candidate if "\u0600" <= c <= "\u06FF") / max(len(candidate), 1)
+        arabizi_lex_match = sum(1 for c in candidate if c.isascii() and c.isalpha()) / max(len(candidate), 1)
+
+        # Target frequency (placeholder - would need vocab stats)
+        log_target_frequency = 0.0
+
+        # Beam rank features
+        beam_rank = rank + 1
+        score_gap_from_best = max_score - score
+        normalized_score_gap_from_best = score_gap_from_best / score_range if score_range > 0 else 0
+
+        # Contains digits
+        contains_2 = "2" in candidate
+        contains_3 = "3" in candidate
+        contains_5 = "5" in candidate
+        contains_6 = "6" in candidate
+        contains_7 = "7" in candidate
+        contains_8 = "8" in candidate
+        contains_9 = "9" in candidate
+
+        feat = [
+            score,  # candidate_score
+            (score - min_score) / score_range if score_range > 0 else 0,  # candidate_normalized_score
+            source_len,  # source_len
+            candidate_len,  # candidate_len
+            candidate_len - source_len,  # candidate_len_minus_source_len
+            candidate_len / source_len if source_len > 0 else 0,  # candidate_len_ratio_to_source
+            source_digit_count,  # source_digit_count
+            candidate_digit_count,  # candidate_digit_count
+            abs(candidate_digit_count - source_digit_count),  # abs_digit_count_diff
+            source_space_count,  # source_space_count
+            candidate_space_count,  # candidate_space_count
+            abs(candidate_space_count - source_space_count),  # abs_space_count_diff
+            source_vowel_like_count,  # source_vowel_like_count
+            candidate_vowel_like_count,  # candidate_vowel_like_count
+            candidate_vowel_like_count / source_vowel_like_count if source_vowel_like_count > 0 else 0,  # candidate_vowel_ratio_to_source
+            arabic_lex_match,  # arabic_lex_match
+            arabizi_lex_match,  # arabizi_lex_match
+            log_target_frequency,  # log_target_frequency
+            beam_rank,  # beam_rank
+            score_gap_from_best,  # score_gap_from_best
+            normalized_score_gap_from_best,  # normalized_score_gap_from_best
+            float(contains_2),  # contains_2
+            float(contains_3),  # contains_3
+            float(contains_5),  # contains_5
+            float(contains_6),  # contains_6
+            float(contains_7),  # contains_7
+            float(contains_8),  # contains_8
+            float(contains_9),  # contains_9
+            float(source_has_apostrophe),  # source_has_apostrophe
+            float(source_has_space),  # source_has_space
+            float(candidate_has_space),  # candidate_has_space
+        ]
+        features.append(feat)
+
+    return torch.tensor(features, dtype=torch.float32, device=DEVICE)
+
+
+def rerank_candidates(
+    source: str,
+    candidates: List[tuple],
+    task_name: str,
+    bundle: Dict[str, Any],
+    reranker: RerankerMLP,
+) -> List[str]:
+    """Rerank candidates using the MLP reranker."""
+    if not candidates:
+        return []
+
+    # Extract features
+    features = extract_reranker_features(source, candidates, task_name, bundle)
+
+    # Get reranker scores
+    with torch.no_grad():
+        rerank_scores = reranker(features)
+
+    # Combine beam score with reranker score (weighted)
+    rerank_scores = rerank_scores.cpu().tolist()
+
+    # Re-rank by combining beam score (normalized) and reranker score
+    beam_scores = [score for _, score in candidates]
+    max_beam = max(beam_scores) if beam_scores else 1
+    min_beam = min(beam_scores) if beam_scores else 0
+    beam_range = max_beam - min_beam if max_beam != min_beam else 1
+
+    reranked = []
+    for i, (token_ids, beam_score) in enumerate(candidates):
+        normalized_beam = (beam_score - min_beam) / beam_range if beam_range > 0 else 0
+        combined_score = 0.5 * normalized_beam + 0.5 * rerank_scores[i]
+        text = decode_token_ids(token_ids, bundle["tgt_itos"], "arabic" if task_name == "arabizi_to_arabic" else "arabizi")
+        reranked.append((text, combined_score))
+
+    # Sort by combined score
+    reranked.sort(key=lambda x: x[1], reverse=True)
+
+    # Return unique candidates
+    outputs = []
+    seen = set()
+    for text, _ in reranked:
+        if text and text not in seen:
+            outputs.append(text)
+            seen.add(text)
+
+    return outputs
+
+
+def predict_candidates(text: str, direction: str, top_k: int = 10, use_reranker: bool = True) -> List[str]:
     task_name, source_script, target_script = scripts_for_direction(direction)
     bundle = BUNDLES[task_name]
     model = MODELS[task_name]
@@ -503,18 +694,106 @@ def predict_candidates(text: str, direction: str, top_k: int = 10) -> List[str]:
     decoder = cfg.get("DEFAULT_DECODER", "beam")
 
     if decoder == "beam":
-        return beam_search_decode_nbest(
+        # Get more candidates than needed for reranking
+        beam_candidates = beam_search_decode_nbest(
             model=model,
             text=text,
             bundle=bundle,
             source_script=source_script,
             target_script=target_script,
-            beam_size=max(int(cfg.get("BEAM_SIZE", 20)), top_k),
-            length_penalty=float(cfg.get("BEAM_LENGTH_PENALTY", 0.80)),
-            top_k=top_k,
+            beam_size=max(int(cfg.get("BEAM_SIZE", 20)), top_k * 2),
+            top_k=top_k * 2,
         )
 
+        # Convert to (token_ids, score) format for reranker
+        # We need to re-run beam search to get scores
+        candidates_with_scores = beam_search_decode_nbest_with_scores(
+            model=model,
+            text=text,
+            bundle=bundle,
+            source_script=source_script,
+            target_script=target_script,
+            beam_size=max(int(cfg.get("BEAM_SIZE", 20)), top_k * 2),
+            top_k=top_k * 2,
+        )
+
+        # Use reranker if available
+        reranker = RERANKERS.get(task_name)
+        if use_reranker and reranker and candidates_with_scores:
+            return rerank_candidates(text, candidates_with_scores, task_name, bundle, reranker)
+
+        # Otherwise return beam search results
+        return beam_candidates
+
     return [greedy_decode(model, text, bundle, source_script, target_script)]
+
+
+def beam_search_decode_nbest_with_scores(
+    model: Seq2SeqTransformer,
+    text: str,
+    bundle: Dict[str, Any],
+    source_script: str,
+    target_script: str,
+    beam_size: int = 20,
+    length_penalty: float = 0.80,
+    top_k: int = 10,
+) -> List[tuple]:
+    """Beam search that returns candidates with their scores for reranking."""
+    src_ids = prepare_source_ids(text, bundle, source_script)
+    max_tgt_len = int(bundle["max_tgt_len"])
+    bos_id = bundle["tgt_stoi"][BOS]
+    eos_id = bundle["tgt_stoi"][EOS]
+
+    beams = [([bos_id], 0.0)]
+    finished = []
+
+    for _ in range(max_tgt_len - 1):
+        candidates = []
+
+        for token_ids, score in beams:
+            if token_ids[-1] == eos_id:
+                finished.append((token_ids, score))
+                continue
+
+            tgt_input = torch.tensor([token_ids], dtype=torch.long, device=DEVICE)
+            logits = model(src_ids, tgt_input)
+            log_probs = F.log_softmax(logits[0, -1], dim=-1)
+
+            values, indices = torch.topk(log_probs, k=min(beam_size, log_probs.size(0)))
+            for value, idx in zip(values.tolist(), indices.tolist()):
+                candidates.append((token_ids + [int(idx)], score + float(value)))
+
+        if not candidates:
+            break
+
+        def normalized_score(item):
+            token_ids, raw_score = item
+            length = max(len(token_ids) - 1, 1)
+            return raw_score / (length ** length_penalty)
+
+        candidates.sort(key=normalized_score, reverse=True)
+        beams = candidates[:beam_size]
+
+        if len(finished) >= top_k and all(b[0][-1] == eos_id for b in beams):
+            break
+
+    finished.extend(beams)
+
+    # Sort by normalized score
+    finished.sort(key=lambda x: normalized_score(x), reverse=True)
+
+    # Remove duplicates but keep scores
+    outputs = []
+    seen = set()
+    for token_ids, score in finished:
+        text_out = decode_token_ids(token_ids, bundle["tgt_itos"], target_script).strip()
+        if text_out and text_out not in seen:
+            outputs.append((token_ids, score))
+            seen.add(text_out)
+        if len(outputs) >= top_k:
+            break
+
+    return outputs
 
 
 #################################
