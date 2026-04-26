@@ -45,6 +45,14 @@
       align-items: center;
       gap: 12px;
       margin-bottom: 18px;
+      justify-content: space-between;
+    }
+
+    .brand-lockup {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
     }
 
     .brand-badge {
@@ -64,6 +72,24 @@
     .hero-title {
       font-size: 1.05rem;
       font-weight: 700;
+    }
+
+    .presentation-link {
+      color: #111111;
+      text-decoration: none;
+      border: 1px solid #cfcfcf;
+      border-radius: 16px;
+      background: #ffffff;
+      padding: 10px 14px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .presentation-link:hover,
+    .presentation-link:focus {
+      border-color: #111111;
+      outline: none;
     }
 
     .top-controls {
@@ -320,6 +346,11 @@
       .actions button {
         flex: 1 1 100%;
       }
+
+      .hero-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
     }
   </style>
 </head>
@@ -327,8 +358,13 @@
   <div class="page">
     <section class="hero">
       <div class="hero-header">
-        <div class="brand-badge">ع</div>
-        <div class="hero-title">Arabizi ↔ Arabic Translator</div>
+        <div class="brand-lockup">
+          <div class="brand-badge">ع</div>
+          <div class="hero-title">Arabizi ↔ Arabic Translator</div>
+        </div>
+        <a class="presentation-link" href="hackathon_presentation.pdf" target="_blank" rel="noopener">
+          Technical Presentation
+        </a>
       </div>
 
       <div class="top-controls">
@@ -444,6 +480,19 @@
       }
       outputPanelSubtitle.textContent = "";
       equalizeHeights();
+    }
+
+    function resetTranslatorState({ clearInput = false } = {}) {
+      if (clearInput) {
+        inputText.value = "";
+      }
+      candidateList.innerHTML = "";
+      copyButton.disabled = true;
+      copyButton.textContent = "Copy Results";
+      outputPanelSubtitle.textContent = "";
+      runButton.textContent = "Transliterate";
+      runButton.classList.remove("loading");
+      syncPanelLabels();
     }
 
     function formatElapsed(seconds) {
@@ -613,14 +662,9 @@
     }
 
     function clearAll() {
-      inputText.value = "";
       direction.value = "Arabizi -> Arabic";
       dialect.value = "Palestinian Arabic";
-      candidateList.innerHTML = "";
-      copyButton.disabled = true;
-      outputPanelSubtitle.textContent = "";
-      syncPanelLabels();
-      equalizeHeights();
+      resetTranslatorState({ clearInput: true });
     }
 
     async function copyOutput() {
@@ -644,7 +688,10 @@
       }
     }
 
-    direction.addEventListener("change", syncPanelLabels);
+    direction.addEventListener("change", () => {
+      resetTranslatorState({ clearInput: true });
+      inputText.focus();
+    });
     runButton.addEventListener("click", runTransliteration);
     clearButton.addEventListener("click", clearAll);
     copyButton.addEventListener("click", copyOutput);
