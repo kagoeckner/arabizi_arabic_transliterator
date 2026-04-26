@@ -5,6 +5,7 @@ working_files/
 
 # Local agent/session files
 .codex
+local.html
 
 # Python cache/build output
 __pycache__/

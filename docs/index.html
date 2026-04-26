@@ -216,12 +216,30 @@
     button.action-btn {
       border-radius: 16px;
       padding: 12px 18px;
+      min-width: 92px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
       border: 1px solid #cfcfcf;
       background: #ffffff;
       color: #111111;
+      white-space: nowrap;
+    }
+
+    button.action-btn:disabled {
+      cursor: not-allowed;
+      background: #ececec;
+      border-color: #d8d8d8;
+      color: #8a8a8a;
+      box-shadow: none;
+    }
+
+    #copyButton {
+      min-width: 132px;
+    }
+
+    #runButton {
+      min-width: 172px;
     }
 
     button.action-btn.primary {
@@ -347,7 +365,7 @@
 
           <div class="actions">
             <button class="action-btn" id="clearButton">Clear</button>
-            <button class="action-btn" id="copyButton">Copy</button>
+            <button class="action-btn" id="copyButton" disabled>Copy Results</button>
             <button class="action-btn primary" id="runButton">Transliterate</button>
           </div>
 
@@ -386,7 +404,7 @@
           <div class="panel" id="outputPanel">
             <div class="panel-top">
               <div class="panel-title" id="outputPanelTitle">Arabic</div>
-              <div class="panel-subtitle" id="outputPanelSubtitle">All returned transliterations</div>
+              <div class="panel-subtitle" id="outputPanelSubtitle"></div>
             </div>
             <div class="output-area">
               <ol id="candidateList" class="candidate-list"></ol>
@@ -417,16 +435,21 @@
         inputPanelTitle.textContent = "Arabizi";
         inputPanelSubtitle.textContent = "Type Arabizi text";
         outputPanelTitle.textContent = "Arabic";
-        outputPanelSubtitle.textContent = "All returned transliterations";
         inputText.placeholder = "Example: keef halak ya sadiqi?";
       } else {
         inputPanelTitle.textContent = "Arabic";
         inputPanelSubtitle.textContent = "Type Arabic text";
         outputPanelTitle.textContent = "Arabizi";
-        outputPanelSubtitle.textContent = "All returned transliterations";
         inputText.placeholder = "مثال: كيف حالك يا صديقي؟";
       }
+      outputPanelSubtitle.textContent = "";
       equalizeHeights();
+    }
+
+    function formatElapsed(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = String(seconds % 60).padStart(2, "0");
+      return `${minutes}:${remainingSeconds}`;
     }
 
     function equalizeHeights() {
@@ -441,7 +464,11 @@
 
     function renderCandidates(candidates) {
       candidateList.innerHTML = "";
-      if (!candidates || candidates.length === 0) return;
+      copyButton.disabled = true;
+      if (!candidates || candidates.length === 0) {
+        equalizeHeights();
+        return;
+      }
 
       // Arabic diacritics (tashkeel) to strip
       const arabicDiacritics = /[\u064B-\u065F\u0670]/g;
@@ -469,6 +496,7 @@
         li.textContent = display;
         candidateList.appendChild(li);
       });
+      copyButton.disabled = uniqueCandidates.length === 0;
       equalizeHeights();
     }
 
@@ -495,15 +523,27 @@
       };
     }
 
-    const API_BASE_URL = "https://arabizi-arabic-transliterator.onrender.com";
+    const LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+    const RENDER_API_BASE_URL = "https://arabizi-arabic-transliterator.onrender.com";
+    const apiMode = new URLSearchParams(window.location.search).get("api");
+    const isLocalPage = (
+      window.location.protocol === "file:" ||
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1"
+    );
+    const API_BASE_URL = (
+      apiMode === "local" || (apiMode !== "render" && isLocalPage)
+    ) ? LOCAL_API_BASE_URL : RENDER_API_BASE_URL;
+    let isRunning = false;
 
-    async function callBackend(payload) {
+    async function callBackend(payload, signal) {
       const response = await fetch(`${API_BASE_URL}/transliterate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal
       });
 
       if (!response.ok) {
@@ -522,6 +562,8 @@
     }
 
     async function runTransliteration() {
+      if (isRunning) return;
+
       const payload = {
         text: inputText.value,
         direction: direction.value,
@@ -535,17 +577,34 @@
         return;
       }
 
+      isRunning = true;
+      renderCandidates([]);
       runButton.disabled = true;
       runButton.classList.add('loading');
-      runButton.textContent = 'Running';
+      const startTime = Date.now();
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => {
+        controller.abort();
+      }, 10 * 60 * 1000);
+      runButton.textContent = `Running ${formatElapsed(0)}`;
+      const timerId = window.setInterval(() => {
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        runButton.textContent = `Running ${formatElapsed(elapsedSeconds)}`;
+      }, 1000);
 
       try {
-        const result = await callBackend(payload);
+        const result = await callBackend(payload, controller.signal);
         renderCandidates(result.candidates || []);
+        const finalSeconds = Math.floor((Date.now() - startTime) / 1000);
+        outputPanelSubtitle.textContent = `All returned transliterations · ${formatElapsed(finalSeconds)}`;
       } catch (error) {
         console.error(error);
         renderCandidates([]);
+        outputPanelSubtitle.textContent = "";
       } finally {
+        isRunning = false;
+        window.clearTimeout(timeoutId);
+        window.clearInterval(timerId);
         runButton.disabled = false;
         runButton.classList.remove('loading');
         runButton.textContent = 'Transliterate';
@@ -558,6 +617,8 @@
       direction.value = "Arabizi -> Arabic";
       dialect.value = "Palestinian Arabic";
       candidateList.innerHTML = "";
+      copyButton.disabled = true;
+      outputPanelSubtitle.textContent = "";
       syncPanelLabels();
       equalizeHeights();
     }
@@ -574,6 +635,10 @@
 
       try {
         await navigator.clipboard.writeText(text);
+        copyButton.textContent = "Copied";
+        window.setTimeout(() => {
+          copyButton.textContent = "Copy Results";
+        }, 1200);
       } catch (error) {
         console.error(error);
       }
