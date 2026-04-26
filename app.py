@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
     "DROPOUT": 0.20,
     "DEFAULT_DECODER": "beam",
     "BEAM_SIZE": 20,
-    "MAX_WEB_BEAM_SIZE": 20,
+    "MAX_WEB_BEAM_SIZE": 5,
     "BEAM_LENGTH_PENALTY": 0.80,
     "RETURN_TOP_K_PREDICTIONS": 10,
     "NORMALIZE_UNICODE_FORM": "NFC",
@@ -691,11 +691,11 @@ def predict_candidates(text: str, direction: str, top_k: int = 10, use_reranker:
     model = MODELS[task_name]
     cfg = get_config(bundle)
 
-    top_k = max(1, min(int(top_k), 5))
+    top_k = max(1, min(int(top_k), 3))
     decoder = cfg.get("DEFAULT_DECODER", "beam")
 
     if decoder == "beam":
-        search_k = top_k * 2 if use_reranker and task_name in RERANKERS else top_k
+        search_k = top_k
         beam_size = min(
             int(cfg.get("BEAM_SIZE", 20)),
             int(cfg.get("MAX_WEB_BEAM_SIZE", 10)),
