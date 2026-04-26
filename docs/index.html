@@ -100,9 +100,21 @@
       border-color: #111111;
     }
 
-    .top-controls label,
-    .status {
+    .top-controls label {
       display: none;
+    }
+
+    .status {
+      flex: 1 1 220px;
+      min-height: 24px;
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.35;
+    }
+
+    .status.error {
+      color: #b42318;
+      font-weight: 600;
     }
 
     /* Loading spinner */
@@ -297,6 +309,12 @@
 
       .actions {
         flex-wrap: wrap;
+        justify-content: stretch;
+      }
+
+      .actions .status,
+      .actions button {
+        flex: 1 1 100%;
       }
     }
   </style>
@@ -498,8 +516,10 @@
       };
     }
 
+    const API_BASE_URL = "https://arabizi-arabic-transliterator.onrender.com";
+
     async function callBackend(payload) {
-      const response = await fetch("https://arabizi-arabic-transliterator.onrender.com/transliterate", {
+      const response = await fetch(`${API_BASE_URL}/transliterate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -508,11 +528,18 @@
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Backend request failed.");
+        let errorMessage = "Backend request failed.";
+        try {
+          const errorJson = await response.json();
+          errorMessage = errorJson.detail || errorMessage;
+        } catch {
+          const errorText = await response.text();
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
 
-  return await response.json();
+      return await response.json();
     }
 
     async function runTransliteration() {

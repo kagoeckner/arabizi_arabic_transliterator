@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
     "DROPOUT": 0.20,
     "DEFAULT_DECODER": "beam",
     "BEAM_SIZE": 20,
+    "MAX_WEB_BEAM_SIZE": 10,
     "BEAM_LENGTH_PENALTY": 0.80,
     "RETURN_TOP_K_PREDICTIONS": 10,
     "NORMALIZE_UNICODE_FORM": "NFC",
@@ -694,36 +695,36 @@ def predict_candidates(text: str, direction: str, top_k: int = 10, use_reranker:
     decoder = cfg.get("DEFAULT_DECODER", "beam")
 
     if decoder == "beam":
-        # Get more candidates than needed for reranking
-        beam_candidates = beam_search_decode_nbest(
-            model=model,
-            text=text,
-            bundle=bundle,
-            source_script=source_script,
-            target_script=target_script,
-            beam_size=max(int(cfg.get("BEAM_SIZE", 20)), top_k * 2),
-            top_k=top_k * 2,
+        search_k = top_k * 2 if use_reranker and task_name in RERANKERS else top_k
+        beam_size = min(
+            int(cfg.get("BEAM_SIZE", 20)),
+            int(cfg.get("MAX_WEB_BEAM_SIZE", 10)),
         )
-
-        # Convert to (token_ids, score) format for reranker
-        # We need to re-run beam search to get scores
         candidates_with_scores = beam_search_decode_nbest_with_scores(
             model=model,
             text=text,
             bundle=bundle,
             source_script=source_script,
             target_script=target_script,
-            beam_size=max(int(cfg.get("BEAM_SIZE", 20)), top_k * 2),
-            top_k=top_k * 2,
+            beam_size=max(1, beam_size),
+            top_k=search_k,
         )
 
-        # Use reranker if available
         reranker = RERANKERS.get(task_name)
         if use_reranker and reranker and candidates_with_scores:
-            return rerank_candidates(text, candidates_with_scores, task_name, bundle, reranker)
+            return rerank_candidates(text, candidates_with_scores, task_name, bundle, reranker)[:top_k]
 
-        # Otherwise return beam search results
-        return beam_candidates
+        outputs = []
+        seen = set()
+        for token_ids, _ in candidates_with_scores:
+            text_out = decode_token_ids(token_ids, bundle["tgt_itos"], target_script).strip()
+            if text_out and text_out not in seen:
+                outputs.append(text_out)
+                seen.add(text_out)
+            if len(outputs) >= top_k:
+                break
+
+        return outputs
 
     return [greedy_decode(model, text, bundle, source_script, target_script)]
 
