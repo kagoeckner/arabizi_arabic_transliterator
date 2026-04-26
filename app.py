@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
     "DROPOUT": 0.20,
     "DEFAULT_DECODER": "beam",
     "BEAM_SIZE": 20,
-    "MAX_WEB_BEAM_SIZE": 10,
+    "MAX_WEB_BEAM_SIZE": 20,
     "BEAM_LENGTH_PENALTY": 0.80,
     "RETURN_TOP_K_PREDICTIONS": 10,
     "NORMALIZE_UNICODE_FORM": "NFC",
@@ -691,7 +691,7 @@ def predict_candidates(text: str, direction: str, top_k: int = 10, use_reranker:
     model = MODELS[task_name]
     cfg = get_config(bundle)
 
-    top_k = max(1, min(int(top_k), 25))
+    top_k = max(1, min(int(top_k), 5))
     decoder = cfg.get("DEFAULT_DECODER", "beam")
 
     if decoder == "beam":
@@ -821,6 +821,7 @@ def transliterate(request: TransliterationRequest):
             text=text,
             direction=request.direction,
             top_k=request.top_k,
+            use_reranker=True,
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

@@ -2,3 +2,11 @@
 hackathon_presentation/
 academic_presentation/
 working_files/
+
+# Local agent/session files
+.codex
+
+# Python cache/build output
+__pycache__/
+*.py[cod]
+*$py.class
