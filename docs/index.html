@@ -104,19 +104,6 @@
       display: none;
     }
 
-    .status {
-      flex: 1 1 220px;
-      min-height: 24px;
-      color: var(--muted);
-      font-size: 0.92rem;
-      line-height: 1.35;
-    }
-
-    .status.error {
-      color: #b42318;
-      font-weight: 600;
-    }
-
     /* Loading spinner */
     .spinner {
       display: inline-block;
@@ -312,7 +299,6 @@
         justify-content: stretch;
       }
 
-      .actions .status,
       .actions button {
         flex: 1 1 100%;
       }
@@ -360,9 +346,8 @@
           </div>
 
           <div class="actions">
-            <div class="status" id="statusBox">Ready.</div>
             <button class="action-btn" id="clearButton">Clear</button>
-            <button class="action-btn" id="copyButton">Copy Output</button>
+            <button class="action-btn" id="copyButton">Copy</button>
             <button class="action-btn primary" id="runButton">Transliterate</button>
           </div>
 
@@ -420,18 +405,12 @@
     const clearButton = document.getElementById("clearButton");
     const copyButton = document.getElementById("copyButton");
     const candidateList = document.getElementById("candidateList");
-    const statusBox = document.getElementById("statusBox");
     const inputPanelTitle = document.getElementById("inputPanelTitle");
     const inputPanelSubtitle = document.getElementById("inputPanelSubtitle");
     const outputPanelTitle = document.getElementById("outputPanelTitle");
     const outputPanelSubtitle = document.getElementById("outputPanelSubtitle");
     const leftColumn = document.getElementById("leftColumn");
     const outputPanel = document.getElementById("outputPanel");
-
-    function setStatus(message, isError = false) {
-      statusBox.textContent = message;
-      statusBox.classList.toggle("error", isError);
-    }
 
     function syncPanelLabels() {
       if (direction.value === "Arabizi -> Arabic") {
@@ -551,24 +530,21 @@
       };
 
       if (!payload.text.trim()) {
-        setStatus("Please enter some text first.", true);
         renderCandidates([]);
+        inputText.focus();
         return;
       }
 
       runButton.disabled = true;
       runButton.classList.add('loading');
-      runButton.innerHTML = '<span class="spinner spinner-small"></span>Transliterating...';
-      setStatus("Running transliteration...");
+      runButton.textContent = 'Running';
 
       try {
         const result = await callBackend(payload);
         renderCandidates(result.candidates || []);
-        setStatus(result.status || "Done.");
       } catch (error) {
         console.error(error);
         renderCandidates([]);
-        setStatus(`Error: ${error.message}`, true);
       } finally {
         runButton.disabled = false;
         runButton.classList.remove('loading');
@@ -583,7 +559,6 @@
       dialect.value = "Palestinian Arabic";
       candidateList.innerHTML = "";
       syncPanelLabels();
-      setStatus("Cleared.");
       equalizeHeights();
     }
 
@@ -591,18 +566,16 @@
       const items = Array.from(candidateList.querySelectorAll("li"))
         .map((li) => li.textContent.trim())
         .filter(Boolean);
-      const text = items.join("\n");
+      const text = items.join(" ");
 
       if (!text) {
-        setStatus("Nothing to copy yet.", true);
         return;
       }
 
       try {
         await navigator.clipboard.writeText(text);
-        setStatus("Output copied to clipboard.");
       } catch (error) {
-        setStatus("Could not copy output in this browser.", true);
+        console.error(error);
       }
     }
 
