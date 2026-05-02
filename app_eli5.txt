@@ -1,0 +1,27 @@
+app.py is the backend server for the Arabizi and Arabic transliterator website.
+It uses FastAPI, which means it exposes a small web API that the HTML page can
+call from the browser. The main endpoint is /transliterate. The website sends
+three things to that endpoint: the text the user typed, the selected direction,
+and how many candidate outputs it wants back.
+
+When app.py starts, it loads the saved PyTorch model files from the models
+folder. For Arabizi -> Arabic, it uses arabizi_to_arabic_best.pt. That model
+reads Arabizi characters and produces Arabic without harakat. It uses a
+softmax-90 style beam search so the API can return several likely Arabic
+possibilities instead of only one answer.
+
+For Arabic -> Arabizi, app.py uses two models in a pipeline. First, it sends the
+Arabic input through harkat_adder.pt. That model adds harakat and returns up to
+five likely vocalized Arabic possibilities. Then each of those possibilities is
+sent into harakat_top_5_to_arabizi_best.pt, which converts Arabic-with-harakat
+into Arabizi. The backend combines those outputs and returns up to ten Arabizi
+candidates in descending likelihood.
+
+The script also defines the Transformer model classes needed to rebuild the
+saved models before loading their weights. It has helper functions for cleaning
+input text, encoding characters as model IDs, decoding model IDs back into
+strings, and running beam-style softmax candidate generation.
+
+In simple terms: docs/index.html is the user interface, and app.py is the model
+engine behind it. The page asks app.py for transliterations, and app.py returns
+a list of possible answers for the page to display.

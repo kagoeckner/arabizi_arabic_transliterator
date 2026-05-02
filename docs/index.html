@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Arabizi Transliteration Demo</title>
+  <title>Arabizi Transliterator Demo</title>
   <style>
     :root {
       --bg: #f7f7f7;
@@ -110,7 +110,8 @@
     }
 
     select,
-    textarea {
+    textarea,
+    input[type="text"] {
       width: 100%;
       border: 1px solid #cfcfcf;
       background: #ffffff;
@@ -122,7 +123,8 @@
     }
 
     select:focus,
-    textarea:focus {
+    textarea:focus,
+    input[type="text"]:focus {
       border-color: #111111;
     }
 
@@ -160,15 +162,16 @@
 
     .translator-shell {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.18fr);
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .left-column {
       display: flex;
       flex-direction: column;
       gap: 14px;
+      min-height: 0;
     }
 
     .right-column {
@@ -206,20 +209,27 @@
       color: #6b7280;
     }
 
-    textarea.main-input {
+    .limit-message {
+      color: #9a3412;
+      font-weight: 700;
+    }
+
+    .main-input {
       border: 0;
       border-radius: 0;
-      min-height: 300px;
-      resize: none;
-      padding: 18px;
+      height: 56px;
+      min-height: 56px;
+      padding: 0 18px;
       background: #ffffff;
-      line-height: 1.7;
+      line-height: 56px;
       font-size: 1rem;
     }
 
     .output-area {
       flex: 1 1 auto;
-      min-height: 300px;
+      height: calc(10 * 1.7em + 36px);
+      min-height: calc(10 * 1.7em + 36px);
+      max-height: calc(10 * 1.7em + 36px);
       padding: 18px;
       background: #ffffff;
       line-height: 1.7;
@@ -233,16 +243,17 @@
     }
 
     .actions {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 10px;
       align-items: center;
-      justify-content: flex-end;
     }
 
     button.action-btn {
       border-radius: 16px;
       padding: 12px 18px;
-      min-width: 92px;
+      min-width: 0;
+      width: 100%;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
@@ -260,14 +271,6 @@
       box-shadow: none;
     }
 
-    #copyButton {
-      min-width: 132px;
-    }
-
-    #runButton {
-      min-width: 172px;
-    }
-
     button.action-btn.primary {
       background: #111111;
       color: #ffffff;
@@ -275,29 +278,35 @@
       box-shadow: 0 4px 12px rgba(0,0,0,0.12);
     }
 
-    .dialect-section-title {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 14px;
+    .dialect-section {
+      flex: 1 1 auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
     }
 
     .dialect-grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      flex: 1 1 auto;
+      min-height: 0;
     }
 
     .dialect-card {
       border: 1px solid #d1d1d1;
-      border-radius: 18px;
+      border-radius: 12px;
       background: #ececec;
-      min-height: 56px;
+      min-height: 0;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 14px 16px;
+      gap: 6px;
+      padding: 6px 8px;
       color: #8a8a8a;
       font-weight: 600;
+      font-size: 1rem;
     }
 
     .dialect-card.active {
@@ -307,13 +316,14 @@
     }
 
     .dialect-pill {
-      font-size: 0.88rem;
+      font-size: 0.82rem;
       border-radius: 999px;
-      padding: 6px 12px;
+      padding: 5px 9px;
       border: 1px solid #111111;
       background: #111111;
       color: #ffffff;
       font-weight: 700;
+      white-space: nowrap;
     }
 
     .dialect-card.inactive .dialect-pill {
@@ -330,12 +340,10 @@
         grid-template-columns: 1fr;
       }
 
-      .right-column .panel {
-        height: auto !important;
-      }
-
       .output-area {
-        min-height: 320px;
+        height: calc(10 * 1.7em + 36px);
+        min-height: calc(10 * 1.7em + 36px);
+        max-height: calc(10 * 1.7em + 36px);
       }
 
       .actions {
@@ -360,7 +368,7 @@
       <div class="hero-header">
         <div class="brand-lockup">
           <div class="brand-badge">ع</div>
-          <div class="hero-title">Arabizi ↔ Arabic Translator</div>
+          <div class="hero-title">Arabizi ↔ Arabic Transliterator</div>
         </div>
         <a class="presentation-link" href="hackathon_presentation.pdf" target="_blank" rel="noopener">
           Technical Presentation
@@ -396,7 +404,7 @@
               <div class="panel-title" id="inputPanelTitle">Arabizi</div>
               <div class="panel-subtitle" id="inputPanelSubtitle">Type Arabizi text</div>
             </div>
-            <textarea id="inputText" class="main-input" placeholder="Example: keef halak ya sadiqi?"></textarea>
+            <input id="inputText" class="main-input" type="text" maxlength="20" placeholder="Example: salaam" />
           </div>
 
           <div class="actions">
@@ -406,7 +414,6 @@
           </div>
 
           <section class="dialect-section">
-            <div class="dialect-section-title">Dialect options</div>
             <div class="dialect-grid">
               <div class="dialect-card active">
                 <span>Palestinian Arabic</span>
@@ -471,15 +478,29 @@
         inputPanelTitle.textContent = "Arabizi";
         inputPanelSubtitle.textContent = "Type Arabizi text";
         outputPanelTitle.textContent = "Arabic";
-        inputText.placeholder = "Example: keef halak ya sadiqi?";
+        inputText.placeholder = "Example: salaam";
       } else {
         inputPanelTitle.textContent = "Arabic";
         inputPanelSubtitle.textContent = "Type Arabic text";
         outputPanelTitle.textContent = "Arabizi";
-        inputText.placeholder = "مثال: كيف حالك يا صديقي؟";
+        inputText.placeholder = "مثال: كيف حالك";
       }
       outputPanelSubtitle.textContent = "";
+      updateInputLimitMessage();
       equalizeHeights();
+    }
+
+    function updateInputLimitMessage() {
+      const maxLength = Number(inputText.maxLength);
+      if (maxLength > 0 && inputText.value.length >= maxLength) {
+        inputPanelSubtitle.textContent = `Maximum ${maxLength} characters reached`;
+        inputPanelSubtitle.classList.add("limit-message");
+      } else {
+        inputPanelSubtitle.classList.remove("limit-message");
+        inputPanelSubtitle.textContent = direction.value === "Arabizi -> Arabic"
+          ? "Type Arabizi text"
+          : "Type Arabic text";
+      }
     }
 
     function resetTranslatorState({ clearInput = false } = {}) {
@@ -502,13 +523,7 @@
     }
 
     function equalizeHeights() {
-      if (window.innerWidth <= 980) {
-        outputPanel.style.height = "auto";
-        return;
-      }
       outputPanel.style.height = "auto";
-      const leftHeight = leftColumn.offsetHeight;
-      outputPanel.style.height = `${leftHeight}px`;
     }
 
     function renderCandidates(candidates) {
@@ -519,33 +534,22 @@
         return;
       }
 
-      // Arabic diacritics (tashkeel) to strip
-      const arabicDiacritics = /[\u064B-\u065F\u0670]/g;
-
-      const seen = new Set();
-      const uniqueCandidates = [];
-
       candidates.forEach((candidate) => {
-        // Strip Arabic diacritics if direction is Arabizi -> Arabic
         let displayText;
         if (direction.value === "Arabizi -> Arabic") {
+          // New Arabizi -> Arabic model already returns unvocalized Arabic.
+          // This fallback only protects older hosted responses that may include tashkeel.
+          const arabicDiacritics = /[\u064B-\u065F\u0670]/g;
           displayText = candidate.replace(arabicDiacritics, "");
         } else {
           displayText = candidate;
         }
 
-        // Skip duplicates (same text without diacritics)
-        if (seen.has(displayText)) return;
-        seen.add(displayText);
-        uniqueCandidates.push({ display: displayText, original: candidate });
-      });
-
-      uniqueCandidates.forEach(({ display, original }) => {
         const li = document.createElement("li");
-        li.textContent = display;
+        li.textContent = displayText;
         candidateList.appendChild(li);
       });
-      copyButton.disabled = uniqueCandidates.length === 0;
+      copyButton.disabled = candidates.length === 0;
       equalizeHeights();
     }
 
@@ -627,7 +631,6 @@
         if (!FALLBACK_API_BASE_URL || error.name === "AbortError") {
           throw error;
         }
-        outputPanelSubtitle.textContent = "Local backend unavailable. Trying hosted API.";
         return await requestTransliteration(FALLBACK_API_BASE_URL, payload, signal);
       }
     }
@@ -639,7 +642,7 @@
         text: inputText.value,
         direction: direction.value,
         dialect: dialect.value,
-        top_k: 3
+        top_k: 10
       };
 
       if (!payload.text.trim()) {
@@ -650,6 +653,7 @@
 
       isRunning = true;
       renderCandidates([]);
+      outputPanelSubtitle.textContent = "";
       runButton.disabled = true;
       runButton.classList.add('loading');
       const startTime = Date.now();
@@ -716,6 +720,7 @@
       resetTranslatorState({ clearInput: true });
       inputText.focus();
     });
+    inputText.addEventListener("input", updateInputLimitMessage);
     runButton.addEventListener("click", runTransliteration);
     clearButton.addEventListener("click", clearAll);
     copyButton.addEventListener("click", copyOutput);

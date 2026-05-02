@@ -24,8 +24,9 @@ from pydantic import BaseModel
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 MODEL_DIR = Path("models")
-ARABIZI_TO_ARABIC_PATH = MODEL_DIR / "arabizi_to_arabic_website_bundle.pt"
-ARABIC_TO_ARABIZI_PATH = MODEL_DIR / "arabic_to_arabizi_website_bundle.pt"
+ARABIZI_TO_ARABIC_PATH = MODEL_DIR / "arabizi_to_arabic_best.pt"
+ARABIC_TO_ARABIZI_PATH = MODEL_DIR / "harakat_top_5_to_arabizi_best.pt"
+HARAKAT_ADDER_PATH = MODEL_DIR / "harkat_adder.pt"
 ARABIZI_TO_ARABIC_RERANKER_PATH = MODEL_DIR / "arabizi_to_arabic_reranker_best.pt"
 ARABIC_TO_ARABIZI_RERANKER_PATH = MODEL_DIR / "arabic_to_arabizi_reranker_best.pt"
 
@@ -182,6 +183,119 @@ class Seq2SeqTransformer(nn.Module):
         src_emb = self.positional_encoding(self.src_embedding(src) * math.sqrt(self.d_model))
         tgt_emb = self.positional_encoding(self.tgt_embedding(tgt_input) * math.sqrt(self.d_model))
 
+        hidden = self.transformer(
+            src=src_emb,
+            tgt=tgt_emb,
+            tgt_mask=tgt_mask,
+            src_key_padding_mask=src_padding_mask,
+            tgt_key_padding_mask=tgt_padding_mask,
+            memory_key_padding_mask=src_padding_mask,
+        )
+        return self.output_layer(hidden)
+
+
+class TrainerSeq2SeqTransformer(nn.Module):
+    def __init__(
+        self,
+        src_vocab_size: int,
+        tgt_vocab_size: int,
+        d_model: int,
+        nhead: int,
+        num_encoder_layers: int,
+        num_decoder_layers: int,
+        dim_feedforward: int,
+        dropout: float,
+        src_pad_idx: int,
+        tgt_pad_idx: int,
+        max_len: int,
+    ):
+        super().__init__()
+        self.src_pad_idx = src_pad_idx
+        self.tgt_pad_idx = tgt_pad_idx
+        self.d_model = d_model
+
+        self.src_embedding = nn.Embedding(src_vocab_size, d_model, padding_idx=src_pad_idx)
+        self.tgt_embedding = nn.Embedding(tgt_vocab_size, d_model, padding_idx=tgt_pad_idx)
+        self.positional_encoding = PositionalEncoding(d_model, dropout=dropout, max_len=max_len)
+        self.transformer = nn.Transformer(
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True,
+            norm_first=True,
+        )
+        self.output_projection = nn.Linear(d_model, tgt_vocab_size)
+
+    def make_tgt_mask(self, tgt_len: int, device: torch.device) -> torch.Tensor:
+        return torch.triu(torch.ones(tgt_len, tgt_len, device=device, dtype=torch.bool), diagonal=1)
+
+    def encode(self, src: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        src_padding_mask = src.eq(self.src_pad_idx)
+        src_emb = self.positional_encoding(self.src_embedding(src) * math.sqrt(self.d_model))
+        memory = self.transformer.encoder(src_emb, src_key_padding_mask=src_padding_mask)
+        return memory, src_padding_mask
+
+    def decode_step(self, tgt: torch.Tensor, memory: torch.Tensor, src_padding_mask: torch.Tensor) -> torch.Tensor:
+        tgt_padding_mask = tgt.eq(self.tgt_pad_idx)
+        tgt_mask = self.make_tgt_mask(tgt.size(1), tgt.device)
+        tgt_emb = self.positional_encoding(self.tgt_embedding(tgt) * math.sqrt(self.d_model))
+        decoded = self.transformer.decoder(
+            tgt_emb,
+            memory,
+            tgt_mask=tgt_mask,
+            tgt_key_padding_mask=tgt_padding_mask,
+            memory_key_padding_mask=src_padding_mask,
+        )
+        return self.output_projection(decoded[:, -1, :])
+
+
+class HarakatAdderWebTransformer(nn.Module):
+    def __init__(
+        self,
+        src_vocab_size: int,
+        tgt_vocab_size: int,
+        d_model: int,
+        nhead: int,
+        num_encoder_layers: int,
+        num_decoder_layers: int,
+        dim_feedforward: int,
+        dropout: float,
+        src_pad_idx: int,
+        tgt_pad_idx: int,
+        max_len: int,
+    ):
+        super().__init__()
+        self.src_pad_idx = src_pad_idx
+        self.tgt_pad_idx = tgt_pad_idx
+        self.d_model = d_model
+
+        self.src_embedding = nn.Embedding(src_vocab_size, d_model, padding_idx=src_pad_idx)
+        self.tgt_embedding = nn.Embedding(tgt_vocab_size, d_model, padding_idx=tgt_pad_idx)
+        self.positional_encoding = PositionalEncoding(d_model, dropout=dropout, max_len=max_len)
+        self.transformer = nn.Transformer(
+            d_model=d_model,
+            nhead=nhead,
+            num_encoder_layers=num_encoder_layers,
+            num_decoder_layers=num_decoder_layers,
+            dim_feedforward=dim_feedforward,
+            dropout=dropout,
+            batch_first=True,
+        )
+        self.output_layer = nn.Linear(d_model, tgt_vocab_size)
+
+    def forward(self, src: torch.Tensor, tgt_input: torch.Tensor) -> torch.Tensor:
+        src_padding_mask = src.eq(self.src_pad_idx)
+        tgt_padding_mask = tgt_input.eq(self.tgt_pad_idx)
+        tgt_len = tgt_input.size(1)
+        tgt_mask = torch.triu(
+            torch.ones(tgt_len, tgt_len, device=tgt_input.device, dtype=torch.bool),
+            diagonal=1,
+        )
+        src_emb = self.positional_encoding(self.src_embedding(src) * math.sqrt(self.d_model))
+        tgt_emb = self.positional_encoding(self.tgt_embedding(tgt_input) * math.sqrt(self.d_model))
         hidden = self.transformer(
             src=src_emb,
             tgt=tgt_emb,
@@ -372,6 +486,9 @@ def load_bundle(path: Path) -> Dict[str, Any]:
 
 
 def build_model_from_bundle(bundle: Dict[str, Any]) -> Seq2SeqTransformer:
+    if "model_config" in bundle:
+        return build_trainer_model_from_bundle(bundle)
+
     cfg = get_config(bundle)
 
     pad_idx = bundle["src_stoi"][PAD]
@@ -393,6 +510,46 @@ def build_model_from_bundle(bundle: Dict[str, Any]) -> Seq2SeqTransformer:
     return model
 
 
+def build_trainer_model_from_bundle(bundle: Dict[str, Any]) -> TrainerSeq2SeqTransformer:
+    cfg = bundle["model_config"]
+    model = TrainerSeq2SeqTransformer(
+        src_vocab_size=int(cfg["src_vocab_size"]),
+        tgt_vocab_size=int(cfg["tgt_vocab_size"]),
+        d_model=int(cfg["d_model"]),
+        nhead=int(cfg["nhead"]),
+        num_encoder_layers=int(cfg["num_encoder_layers"]),
+        num_decoder_layers=int(cfg["num_decoder_layers"]),
+        dim_feedforward=int(cfg["dim_feedforward"]),
+        dropout=float(cfg["dropout"]),
+        src_pad_idx=int(cfg["src_pad_idx"]),
+        tgt_pad_idx=int(cfg["tgt_pad_idx"]),
+        max_len=int(cfg["max_len"]),
+    ).to(DEVICE)
+    model.load_state_dict(bundle["model_state_dict"])
+    model.eval()
+    return model
+
+
+def build_harakat_adder_model_from_bundle(bundle: Dict[str, Any]) -> HarakatAdderWebTransformer:
+    cfg = bundle["config"]
+    model = HarakatAdderWebTransformer(
+        src_vocab_size=int(cfg["src_vocab_size"]),
+        tgt_vocab_size=int(cfg["tgt_vocab_size"]),
+        d_model=int(cfg["d_model"]),
+        nhead=int(cfg["nhead"]),
+        num_encoder_layers=int(cfg["num_encoder_layers"]),
+        num_decoder_layers=int(cfg["num_decoder_layers"]),
+        dim_feedforward=int(cfg["dim_feedforward"]),
+        dropout=float(cfg["dropout"]),
+        src_pad_idx=int(cfg["src_pad_idx"]),
+        tgt_pad_idx=int(cfg["tgt_pad_idx"]),
+        max_len=int(cfg["max_len"]),
+    ).to(DEVICE)
+    model.load_state_dict(bundle["model_state_dict"])
+    model.eval()
+    return model
+
+
 BUNDLES: Dict[str, Dict[str, Any]] = {}
 MODELS: Dict[str, Seq2SeqTransformer] = {}
 RERANKERS: Dict[str, RerankerMLP] = {}
@@ -400,30 +557,11 @@ RERANKERS: Dict[str, RerankerMLP] = {}
 try:
     BUNDLES["arabizi_to_arabic"] = load_bundle(ARABIZI_TO_ARABIC_PATH)
     BUNDLES["arabic_to_arabizi"] = load_bundle(ARABIC_TO_ARABIZI_PATH)
+    BUNDLES["harakat_adder"] = load_bundle(HARAKAT_ADDER_PATH)
 
     MODELS["arabizi_to_arabic"] = build_model_from_bundle(BUNDLES["arabizi_to_arabic"])
     MODELS["arabic_to_arabizi"] = build_model_from_bundle(BUNDLES["arabic_to_arabizi"])
-
-    # Load rerankers
-    if ARABIZI_TO_ARABIC_RERANKER_PATH.exists():
-        reranker_bundle = torch.load(ARABIZI_TO_ARABIC_RERANKER_PATH, map_location=DEVICE)
-        reranker = RerankerMLP(
-            input_dim=reranker_bundle["input_dim"],
-            hidden_dim=reranker_bundle.get("hidden_dim", 128)
-        ).to(DEVICE)
-        reranker.load_state_dict(reranker_bundle["model_state_dict"])
-        reranker.eval()
-        RERANKERS["arabizi_to_arabic"] = reranker
-
-    if ARABIC_TO_ARABIZI_RERANKER_PATH.exists():
-        reranker_bundle = torch.load(ARABIC_TO_ARABIZI_RERANKER_PATH, map_location=DEVICE)
-        reranker = RerankerMLP(
-            input_dim=reranker_bundle["input_dim"],
-            hidden_dim=reranker_bundle.get("hidden_dim", 128)
-        ).to(DEVICE)
-        reranker.load_state_dict(reranker_bundle["model_state_dict"])
-        reranker.eval()
-        RERANKERS["arabic_to_arabizi"] = reranker
+    MODELS["harakat_adder"] = build_harakat_adder_model_from_bundle(BUNDLES["harakat_adder"])
 
 except Exception as exc:
     # Keep the import error readable in the terminal.
@@ -444,6 +582,218 @@ def prepare_source_ids(text: str, bundle: Dict[str, Any], source_script: str) ->
     source_tokens = tokenize_text_by_script(text, source_script, cfg)
     source_ids = encode_tokens(source_tokens, bundle["src_stoi"], int(bundle["max_src_len"]))
     return torch.tensor([source_ids], dtype=torch.long, device=DEVICE)
+
+
+def clean_trainer_text(value: str, lowercase: bool = False) -> str:
+    text = "" if value is None else str(value)
+    text = " ".join(text.split())
+    return text.lower() if lowercase else text
+
+
+def trainer_special(bundle: Dict[str, Any], name: str) -> str:
+    token = f"<{name.lower()}>"
+    if token in bundle["src_stoi"] or token in bundle["tgt_stoi"]:
+        return token
+    return token.upper()
+
+
+def encode_trainer_source(text: str, bundle: Dict[str, Any], source_script: str) -> torch.Tensor:
+    pad = trainer_special(bundle, "pad")
+    eos = trainer_special(bundle, "eos")
+    unk = trainer_special(bundle, "unk")
+    stoi = bundle["src_stoi"]
+    max_len = int(bundle["model_config"]["max_len"])
+    normalized = clean_trainer_text(text, lowercase=(source_script == "arabizi"))
+    ids = [stoi.get(ch, stoi[unk]) for ch in normalized]
+    ids.append(stoi[eos])
+    ids = ids[:max_len]
+    if ids[-1] != stoi[eos]:
+        ids[-1] = stoi[eos]
+    return torch.tensor([ids], dtype=torch.long, device=DEVICE)
+
+
+def decode_trainer_ids(token_ids: List[int], bundle: Dict[str, Any]) -> str:
+    pad = trainer_special(bundle, "pad")
+    bos = trainer_special(bundle, "bos")
+    eos = trainer_special(bundle, "eos")
+    itos = bundle["tgt_itos"]
+    chars = []
+    for token_id in token_ids:
+        token = id_to_token(itos, int(token_id))
+        if token == eos:
+            break
+        if token in {pad, bos}:
+            continue
+        chars.append(token)
+    return "".join(chars).strip()
+
+
+def encode_simple_char_source(text: str, bundle: Dict[str, Any], config_key: str) -> torch.Tensor:
+    eos = trainer_special(bundle, "eos")
+    unk = trainer_special(bundle, "unk")
+    stoi = bundle["src_stoi"]
+    max_len = int(bundle[config_key]["max_len"])
+    normalized = clean_trainer_text(text, lowercase=False)
+    ids = [stoi.get(ch, stoi[unk]) for ch in normalized]
+    ids.append(stoi[eos])
+    ids = ids[:max_len]
+    if ids[-1] != stoi[eos]:
+        ids[-1] = stoi[eos]
+    return torch.tensor([ids], dtype=torch.long, device=DEVICE)
+
+
+def decode_simple_char_ids(token_ids: List[int], bundle: Dict[str, Any]) -> str:
+    return decode_trainer_ids(token_ids, bundle)
+
+
+@torch.no_grad()
+def harakat_softmax_90_candidates(
+    model: HarakatAdderWebTransformer,
+    text: str,
+    bundle: Dict[str, Any],
+    top_k: int = 5,
+    threshold: float = 0.90,
+    beam_width: int = 10,
+    max_candidates: int = 25,
+) -> List[tuple[str, float]]:
+    src = encode_simple_char_source(text, bundle, "config")
+    bos = trainer_special(bundle, "bos")
+    eos = trainer_special(bundle, "eos")
+    bos_id = bundle["tgt_stoi"][bos]
+    eos_id = bundle["tgt_stoi"][eos]
+    max_len = int(bundle["config"]["max_len"])
+    beams = [([bos_id], 0.0)]
+    completed = []
+
+    for _ in range(max_len):
+        expanded = []
+        for seq, score in beams:
+            if seq[-1] == eos_id:
+                completed.append((seq, score))
+                continue
+
+            tgt = torch.tensor([seq], dtype=torch.long, device=DEVICE)
+            logits = model(src, tgt)[:, -1, :]
+            probs = torch.softmax(logits, dim=-1).squeeze(0)
+            log_probs = torch.log_softmax(logits, dim=-1).squeeze(0)
+            sorted_probs, sorted_ids = torch.sort(probs, descending=True)
+            cumulative = torch.cumsum(sorted_probs, dim=0)
+            cutoff = torch.where(cumulative >= threshold)[0]
+            cutoff_idx = int(cutoff[0].item()) + 1 if len(cutoff) else beam_width
+            num_to_take = min(max(beam_width, cutoff_idx), max_candidates, len(sorted_probs))
+
+            for idx in range(num_to_take):
+                next_id = int(sorted_ids[idx].item())
+                expanded.append((seq + [next_id], score + float(log_probs[next_id].item())))
+
+        if not expanded:
+            break
+        expanded.sort(key=lambda item: item[1], reverse=True)
+        beams = expanded[:max_candidates]
+        if len(completed) >= max_candidates and all(seq[-1] == eos_id for seq, _ in beams):
+            break
+
+    deduped: Dict[str, float] = {}
+    for seq, score in completed + beams:
+        output = decode_simple_char_ids(seq[1:], bundle)
+        if output and (output not in deduped or score > deduped[output]):
+            deduped[output] = score
+
+    return sorted(deduped.items(), key=lambda item: item[1], reverse=True)[:top_k]
+
+
+@torch.no_grad()
+def trainer_softmax_90_candidates(
+    model: TrainerSeq2SeqTransformer,
+    text: str,
+    bundle: Dict[str, Any],
+    source_script: str,
+    top_k: int = 10,
+    threshold: float = 0.90,
+    beam_width: int = 10,
+    max_candidates: int = 25,
+) -> List[tuple[str, float]]:
+    src = encode_trainer_source(text, bundle, source_script)
+    memory, src_padding_mask = model.encode(src)
+    bos = trainer_special(bundle, "bos")
+    eos = trainer_special(bundle, "eos")
+    bos_id = bundle["tgt_stoi"][bos]
+    eos_id = bundle["tgt_stoi"][eos]
+    max_len = int(bundle["model_config"]["max_len"])
+
+    beams = [([bos_id], 0.0)]
+    completed = []
+
+    for _ in range(max_len):
+        expanded = []
+        for seq, score in beams:
+            if seq[-1] == eos_id:
+                completed.append((seq, score))
+                continue
+
+            tgt = torch.tensor([seq], dtype=torch.long, device=DEVICE)
+            logits = model.decode_step(tgt, memory, src_padding_mask)
+            probs = torch.softmax(logits, dim=-1).squeeze(0)
+            log_probs = torch.log_softmax(logits, dim=-1).squeeze(0)
+            sorted_probs, sorted_ids = torch.sort(probs, descending=True)
+            cumulative = torch.cumsum(sorted_probs, dim=0)
+            cutoff = torch.where(cumulative >= threshold)[0]
+            cutoff_idx = int(cutoff[0].item()) + 1 if len(cutoff) else beam_width
+            num_to_take = min(max(beam_width, cutoff_idx), max_candidates, len(sorted_probs))
+
+            for idx in range(num_to_take):
+                next_id = int(sorted_ids[idx].item())
+                expanded.append((seq + [next_id], score + float(log_probs[next_id].item())))
+
+        if not expanded:
+            break
+        expanded.sort(key=lambda item: item[1], reverse=True)
+        beams = expanded[:max_candidates]
+        if len(completed) >= max_candidates and all(seq[-1] == eos_id for seq, _ in beams):
+            break
+
+    all_candidates = completed + beams
+    deduped: Dict[str, float] = {}
+    for seq, score in all_candidates:
+        output = decode_trainer_ids(seq[1:], bundle)
+        if output and (output not in deduped or score > deduped[output]):
+            deduped[output] = score
+
+    ranked = sorted(deduped.items(), key=lambda item: item[1], reverse=True)
+    return ranked[:top_k]
+
+
+def trainer_softmax_90_texts(*args, **kwargs) -> List[str]:
+    return [text for text, _ in trainer_softmax_90_candidates(*args, **kwargs)]
+
+
+@torch.no_grad()
+def arabic_to_arabizi_pipeline(text: str, top_k: int = 10) -> List[str]:
+    harakat_candidates = harakat_softmax_90_candidates(
+        model=MODELS["harakat_adder"],
+        text=text,
+        bundle=BUNDLES["harakat_adder"],
+        top_k=5,
+    )
+    if not harakat_candidates:
+        return []
+
+    arabizi_bundle = BUNDLES["arabic_to_arabizi"]
+    arabizi_model = MODELS["arabic_to_arabizi"]
+    combined = []
+    for harakat_text, harakat_score in harakat_candidates:
+        arabizi_candidates = trainer_softmax_90_candidates(
+            model=arabizi_model,
+            text=harakat_text,
+            bundle=arabizi_bundle,
+            source_script="arabic",
+            top_k=max(1, min(int(top_k), 10)),
+        )
+        for arabizi_text, arabizi_score in arabizi_candidates:
+            combined.append((arabizi_text, harakat_score + arabizi_score))
+
+    combined.sort(key=lambda item: item[1], reverse=True)
+    return [arabizi_text for arabizi_text, _ in combined[:max(1, min(int(top_k), 10))]]
 
 
 @torch.no_grad()
@@ -687,8 +1037,20 @@ def rerank_candidates(
 
 def predict_candidates(text: str, direction: str, top_k: int = 10, use_reranker: bool = True) -> List[str]:
     task_name, source_script, target_script = scripts_for_direction(direction)
+    if task_name == "arabic_to_arabizi":
+        return arabic_to_arabizi_pipeline(text, top_k=top_k)
+
     bundle = BUNDLES[task_name]
     model = MODELS[task_name]
+    if "model_config" in bundle:
+        return trainer_softmax_90_texts(
+            model=model,
+            text=text,
+            bundle=bundle,
+            source_script=source_script,
+            top_k=max(1, min(int(top_k), 10)),
+        )
+
     cfg = get_config(bundle)
 
     top_k = max(1, min(int(top_k), 3))
