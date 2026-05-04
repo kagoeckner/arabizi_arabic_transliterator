@@ -1,0 +1,5 @@
+k,total,hits,top_k_accuracy,length_type,length_bucket,evaluation_source_col
+1,1000,465,0.465,overall,all,arabic_stripped
+3,1000,751,0.751,overall,all,arabic_stripped
+5,1000,826,0.826,overall,all,arabic_stripped
+10,1000,874,0.874,overall,all,arabic_stripped

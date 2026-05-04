@@ -1,0 +1,158 @@
+Train Harakat Top 1 To Arabizi
+
+This notebook trains a Transformer to turn Arabic with predicted harakat back
+into Arabizi. It is an apples-to-apples comparison with the Levanti harakat
+experiment, but instead of using an off-the-shelf Levanti harakat model, it uses
+the single best harakat prediction made by this project's own harakat_adder.pt
+model.
+
+In simple terms:
+
+1. The harakat_adder model looks at Arabic without harakat.
+2. It predicts possible Arabic strings with harakat.
+3. This notebook keeps only the top prediction, stored as harakat_top_prediction.
+4. It trains a model to translate that predicted-harakat Arabic into Arabizi.
+5. It saves checkpoints, final model bundles, prediction previews, metrics,
+   softmax-90 top-k outputs, error analysis tables, and charts.
+
+The input data file is:
+
+working_files/data/maknuune-v1.0.1_cleaned_predictions_top_5.csv
+
+That file has 36,302 data rows and includes these important columns:
+
+arabizi
+arabic_harakat
+arabic_stripped
+harakat_predictions_softmax_90
+harakat_top_prediction
+harakat_top_probability
+harakat_prediction_1 through harakat_prediction_5
+
+This notebook only trains from the single best custom harakat prediction:
+
+harakat_top_prediction -> arabizi
+
+After cleaning empty values and removing duplicate source/target pairs, the
+training table has 34,496 rows. With seed 42, the notebook shuffles the rows and
+splits them like this:
+
+27,596 training rows
+3,449 validation rows
+3,451 test rows
+
+The model is a character-level sequence-to-sequence Transformer. The encoder
+reads the predicted-harakat Arabic characters. The decoder writes Arabizi
+characters one at a time.
+
+Important training settings:
+
+batch size: 128
+epochs: 100
+learning rate: 0.0003
+weight decay: 0.0001
+gradient clipping: 1.0
+early stopping patience: 12
+embedding size: 192
+attention heads: 8
+encoder layers: 3
+decoder layers: 3
+feedforward size: 512
+dropout: 0.15
+
+The full training run completed all 100 epochs on May 3, 2026. It saved regular
+epoch checkpoints every 5 epochs, plus a current checkpoint, a final model, and
+the best model.
+
+The best validation sequence accuracy happened at epoch 78:
+
+validation loss: 0.3413
+validation token accuracy: 88.69%
+validation sequence accuracy: 51.38%
+
+The lowest validation loss happened at epoch 94:
+
+validation loss: 0.3348
+validation token accuracy: 88.88%
+validation sequence accuracy: 50.25%
+
+The final epoch, epoch 100, ended with:
+
+training loss: 0.2643
+training token accuracy: 90.39%
+training sequence accuracy: 51.87%
+validation loss: 0.3350
+validation token accuracy: 88.89%
+validation sequence accuracy: 50.33%
+
+Token accuracy asks: how many individual output characters were correct?
+
+Sequence accuracy asks: how many full Arabizi strings were exactly correct?
+
+Sequence accuracy is stricter, because one wrong character makes the whole row
+count as wrong.
+
+The test error analysis found 3,451 test examples. Overall, 1,778 were exactly
+right and 1,673 had at least one error, which is about 51.5% exact match on the
+test set.
+
+By source length, shorter predicted-harakat inputs worked much better:
+
+0-9 characters: 1,404 / 2,717 correct = 51.67%
+10-19 characters: 374 / 677 correct = 55.24%
+20+ characters: 0 correct in this test split
+
+By target Arabizi length, short outputs also worked much better:
+
+0-9 characters: 1,645 / 2,996 correct = 54.91%
+10-19 characters: 133 / 375 correct = 35.47%
+20+ characters: 0 correct in this test split
+
+The softmax-90 top-k section does not keep only one Arabizi guess. It keeps
+several likely guesses and checks whether the true Arabizi answer appears in the
+top 1, top 3, top 5, or top 10 predictions. This matters because Arabizi spelling
+can be flexible, so the correct answer may be near the top even when the first
+guess is not exact.
+
+Softmax-90 top-k evaluation used 1,000 rows from the test set:
+
+top 1: 505 / 1000 = 50.5%
+top 3: 761 / 1000 = 76.1%
+top 5: 821 / 1000 = 82.1%
+top 10: 875 / 1000 = 87.5%
+
+The notebook saves these main CSV files:
+
+train_harakat_top_1_to_arabizi_metrics.csv
+train_harakat_top_1_to_arabizi_progress.csv
+train_harakat_top_1_to_arabizi_metrics_by_length.csv
+train_harakat_top_1_to_arabizi_error_analysis_by_length.csv
+train_harakat_top_1_to_arabizi_error_analysis_details.csv
+train_harakat_top_1_to_arabizi_prediction_preview.csv
+train_harakat_top_1_to_arabizi_arabizi_predictions_softmax_90_from_harakat_top_1.csv
+train_harakat_top_1_to_arabizi_top_k_metrics_from_harakat_top_1.csv
+train_harakat_top_1_to_arabizi_top_k_metrics_by_length_from_harakat_top_1.csv
+
+It saves these model files:
+
+train_harakat_top_1_to_arabizi_checkpoint.pt
+train_harakat_top_1_to_arabizi.pt
+train_harakat_top_1_to_arabizi_best.pt
+train_harakat_top_1_to_arabizi_epoch_005.pt through train_harakat_top_1_to_arabizi_epoch_100.pt
+
+It also saves PNG and PDF charts for:
+
+loss and token error
+sequence error
+learning rate
+error by source length
+error by target length
+count by source length
+count by target length
+top-k accuracy
+top-k by source length
+top-k by target length
+
+The most important takeaway is that using the project's own top-1 harakat
+prediction gives a solid first Arabizi guess about half the time, and the correct
+Arabizi spelling appears somewhere in the top 10 candidates 87.5% of the time.

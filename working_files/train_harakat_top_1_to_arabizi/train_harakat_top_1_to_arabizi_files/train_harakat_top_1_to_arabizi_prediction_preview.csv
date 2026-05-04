@@ -1,0 +1,11 @@
+source,target,prediction,exact_match
+يزَرْزِب,yzarzib,yzarzib,True
+الكِخّ أَخُو الخَرَا,2il kikh 2akhu 2ilkhara,2ilkikhkir 2ikhsaawak,False
+اِنْقِلَاب,2inqilaab,2inqilaab,True
+يِكْدَح,yikda7,ykaddi7,False
+بَطْرِخ,batrakh,batrikh,False
+سِن أَلَاسِي,sinn 2ilya2s,sin 2asaali,False
+قَحَط,qa77at,qa77it,False
+شَرَف,sharrif,sharrif,True
+بَالتَّوْفِيق,bittawfiiq,bitlawwaqi,False
+حَزَّب,7izib,7azzib,False

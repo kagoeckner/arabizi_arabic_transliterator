@@ -1,0 +1,138 @@
+Levanti Harakat Prediction Maker Script
+
+This notebook is a helper that adds harakat to Arabic text. Harakat are the small vowel marks above or below Arabic letters. The input text already has the Arabic letters, but the marks are missing. The notebook asks a ready-made Levanti/Palestinian diacritization model to guess where those marks should go.
+
+The main idea is simple:
+
+1. Start with Arabic text without harakat.
+2. Send that text to a Hugging Face model trained for Levanti/Palestinian Arabic.
+3. Get back the same text with predicted harakat added.
+4. Save those predictions into a CSV file.
+5. Compare the predictions to the known correct harakat, when the correct answer is available.
+
+This script does not train a new model. It uses the existing Hugging Face model guymorlan/levanti_arabic2diacritics. That makes it different from the project notebooks that train custom Transformer models. This notebook is more like using a finished tool and testing how well that tool works on the Maknuune data.
+
+The notebook first installs and imports the tools it needs: pandas for tables, torch for running the model, tqdm for progress bars, and transformers for loading the Hugging Face tokenizer and model. It then chooses a device. If a GPU is available, it uses cuda. In the saved run, the notebook used cuda.
+
+Next, it sets up the file paths. In Google Colab, it looks in:
+
+/content/drive/MyDrive/arabizi
+
+The main input file is:
+
+maknuune-v1.0.1_cleaned.csv
+
+The notebook writes predictions to:
+
+maknuune-v1.0.1_cleaned_levanti_harakat_predictions.csv
+
+It writes the accuracy summary to:
+
+levanti_harakat_prediction_metrics_by_length.csv
+
+The important input column is arabic_stripped. This contains Arabic text with the harakat removed. The answer column is arabic_harakat. This contains the gold, or expected, version with harakat.
+
+After that, the notebook loads the Hugging Face tokenizer and model. You can think of the tokenizer as the part that breaks the Arabic text into model-readable pieces. The model looks at each character and predicts which harakat marks belong with it.
+
+The model can predict five marks:
+
+shadda: ّ
+fatha: َ
+kasra: ِ
+damma: ُ
+sukun: ْ
+
+For each character, the notebook asks: does this character need this mark? It uses sigmoid scores and keeps marks whose score is above 0.5. This matters because one Arabic character can sometimes have more than one mark, such as a vowel plus shadda.
+
+The add_levanti_harakat function is the heart of the notebook. In ELI5 terms, it does this:
+
+It cleans up the text.
+It gives the text to the model.
+It gets predictions for each character.
+It checks that the number of predictions matches the number of characters.
+It rebuilds the word one character at a time.
+After each character, it adds the marks the model predicted.
+
+For example, the notebook tests this input:
+
+بديش اروح عالمدرسة بكرا
+
+The model predicts:
+
+بِدِّيْش اْرُوْح عَاْلْمَدْرَسِة بُكْرَا
+
+Then the notebook loads the data. If a predictions file already exists, it resumes from that file instead of starting over. This is useful because running all rows can take several minutes, and Colab sessions can disconnect. The notebook skips rows that already have predictions.
+
+For every unfinished row, it reads arabic_stripped, predicts Levanti harakat, and saves two new columns:
+
+levanti_harakat_prediction: the model's marked Arabic prediction
+levanti_harakat_prediction_done_at: the timestamp for when that row was completed
+
+The notebook saves progress every 100 rows. At the end, it saves the full predictions file one more time. In the recorded run, it processed all 36,302 rows and had 0 prediction errors.
+
+After predictions are finished, the notebook checks accuracy. The metric is exact-match accuracy. That means the prediction only counts as correct if the entire predicted string exactly matches arabic_harakat. If one tiny mark is different, the whole row is counted as wrong.
+
+That is a very strict test. It is like grading a spelling test where one wrong accent mark makes the whole answer incorrect.
+
+Overall result:
+
+Rows tested: 36,302
+Average stripped Arabic length: about 5.07 characters
+Exact-match accuracy: about 28.37%
+
+Results by input length:
+
+0-9 characters:
+Rows: 34,072
+Exact-match accuracy: about 30.00%
+
+10-19 characters:
+Rows: 1,888
+Exact-match accuracy: about 4.08%
+
+20-29 characters:
+Rows: 255
+Exact-match accuracy: about 0.39%
+
+30-39 characters:
+Rows: 64
+Exact-match accuracy: 0.00%
+
+40-49 characters:
+Rows: 11
+Exact-match accuracy: 0.00%
+
+50-59 characters:
+Rows: 8
+Exact-match accuracy: 0.00%
+
+60-69 characters:
+Rows: 2
+Exact-match accuracy: 0.00%
+
+70-79 characters:
+Rows: 2
+Exact-match accuracy: 0.00%
+
+The results show that the off-the-shelf Levanti model was best on very short entries. It matched the gold answer exactly about 30% of the time for 0-9 character inputs. The score dropped sharply as the input got longer.
+
+This drop makes sense because exact matching is harsh. A longer phrase has more letters, so there are more chances for one mark to differ. Even a prediction that looks mostly reasonable can score as wrong if one vowel, shadda, or sukun does not match the gold version.
+
+Some examples from the saved predictions show what is happening:
+
+arabic_stripped: أبد
+gold arabic_harakat: أَبَد
+prediction: أَبَد
+This one is exactly correct.
+
+arabic_stripped: إبرة
+gold arabic_harakat: إِبْرِة
+prediction: إِبْرَة
+This is close, but not exact. The model chose a different vowel near the end.
+
+arabic_stripped: قد خرم الإبرة
+gold arabic_harakat: قَدّ خُرُم الإِبْرِة
+prediction: قَد خَرَّم الإِبْرَة
+This prediction is readable-looking, but it differs from the gold answer in several places, so exact-match accuracy counts it as wrong.
+
+The big takeaway is that the notebook successfully creates Levanti harakat predictions for the whole cleaned dataset, but this particular off-the-shelf model does not match the Maknuune gold harakat very closely under strict exact-match scoring. It is useful as a comparison baseline and as a way to generate Levanti-style marked text, but the custom project model performed better on this dataset because it was trained directly for the project's data and scoring setup.

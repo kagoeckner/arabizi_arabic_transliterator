@@ -1,0 +1,82 @@
+train_arabizi_to_arabic.ipynb trains a character-level Transformer that
+converts Arabizi into Arabic script without harakat. In plain terms, it learns
+how to read spellings like 2abad, 3ajuuze, or qadd and write the matching Arabic
+letters. The source column is arabizi, and the target column is arabic_stripped.
+Unlike the harakat-top-5-to-Arabizi model, this notebook has only one source
+column and one target column. It is a direct transliteration model.
+
+The notebook reads maknuune-v1.0.1_cleaned_predictions_top_5.csv. In Google
+Colab, it expects that file to be in:
+
+/content/drive/MyDrive/arabizi/
+
+It saves outputs in:
+
+/content/drive/MyDrive/arabizi/train_arabizi_to_arabic_files/
+
+The notebook first cleans empty strings, removes duplicate source-target pairs,
+shuffles the data, and splits it into train, validation, and test sets. It then
+builds two character vocabularies: one for Arabizi input characters and one for
+Arabic output characters. This character-level setup is important because
+Arabizi is not standardized. The same Arabic sound can be written with numbers,
+Latin letters, or combinations of both. A character-level model can learn these
+small spelling patterns directly instead of needing a fixed word dictionary.
+
+The model is an encoder-decoder Transformer. The encoder reads the Arabizi
+source string. The decoder generates Arabic letters one character at a time.
+During training, the model is scored with cross-entropy loss. The notebook
+tracks token accuracy and sequence accuracy. Token accuracy asks, "How many
+individual characters did the model get right?" Sequence accuracy is stricter:
+the entire Arabic output must match the target exactly. If one letter is wrong,
+the full row counts as incorrect.
+
+The notebook is designed for Colab reliability. It saves a checkpoint every
+epoch, saves a best model whenever validation sequence accuracy improves, and
+saves periodic .pt snapshots every five epochs. The main model files are:
+
+train_arabizi_to_arabic.pt
+train_arabizi_to_arabic_best.pt
+train_arabizi_to_arabic_checkpoint.pt
+
+It also saves training metrics, progress logs, metrics by length, error
+analysis files, softmax-90 predictions, top-k metrics, and plots. The plots show
+loss, sequence error, learning rate, error by source length, error by target
+length, and top-k accuracy by length. These files make it possible to explain
+not only whether the model works, but also where it works best and where it
+still struggles.
+
+The completed saved run trained for 100 epochs. The best validation model was
+saved at epoch 89. At that point, validation token accuracy was 91.51%, and
+strict validation sequence accuracy was 75.33%. The final epoch, epoch 100, was
+very close, with validation token accuracy of 91.55% and validation sequence
+accuracy of 75.24%. The final test metrics were also strong: test loss was
+0.2827, test token accuracy was 91.83%, and strict test sequence accuracy was
+75.80%. That means the model produces a fully exact Arabic-without-harakat
+string for about 76 out of every 100 test examples.
+
+The length analysis shows that short items are much easier than long ones. On
+the test split, target length 0-9 reached about 80.81% sequence accuracy. Target
+length 10-19 dropped to about 11.31%, and longer buckets had very few examples
+and much lower exact-match scores. The source-length error analysis shows the
+same pattern: source length 0-9 reached about 82.14% exact-match accuracy,
+source length 10-19 reached about 42.15%, and source length 20-29 dropped to
+about 3.13%. This does not mean the model is useless on longer examples. It
+means strict sequence accuracy is harsh: a longer phrase gives the model more
+chances to make one small mistake.
+
+The notebook also performs softmax-90 top-k evaluation on 1,000 sampled rows.
+Instead of keeping only one answer, it generates a short list of possible Arabic
+outputs. In the saved run, the correct Arabic target appeared in the top 1
+prediction 77.5% of the time, in the top 3 predictions 88.8% of the time, in
+the top 5 predictions 90.4% of the time, and in the top 10 predictions 91.7% of
+the time. This is useful because an application can show multiple choices or
+send the candidates to another selection step.
+
+The purpose of this notebook is to build the main Arabizi-to-Arabic direction
+of the transliteration system. The harakat models focus on Arabic vocalization,
+but this model solves a different problem: converting informal Latin/number
+writing into Arabic letters. Its results show that the model has learned the
+core mapping well, especially for short words and common forms. The remaining
+challenge is longer phrases, where future work could add more long training
+examples, tune the architecture, or use the softmax top-k candidates to improve
+final selection.

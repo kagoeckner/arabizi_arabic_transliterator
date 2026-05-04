@@ -1,0 +1,29 @@
+This notebook is a small one-time data preparation step for the harakat
+prediction data. The model that added harakat produced a column called
+harakat_predictions_softmax_90. Each row in that column stores a JSON-style
+list of possible Arabic-with-harakat predictions, along with probability
+scores. That format is useful for saving all model possibilities, but it is
+not very convenient for training another model or quickly checking the top
+choices in a spreadsheet.
+
+The notebook reads maknuune-v1.0.1_cleaned_predictions.csv and opens the
+harakat_predictions_softmax_90 list for every row. It sorts those possibilities
+from most likely to least likely using the probability value. Then it pulls out
+the five most likely text predictions and writes them into five easy-to-use
+columns:
+
+harakat_prediction_1
+harakat_prediction_2
+harakat_prediction_3
+harakat_prediction_4
+harakat_prediction_5
+
+The cleaned result is saved as
+maknuune-v1.0.1_cleaned_predictions_top_5.csv in the data folder.
+
+We do this cleaning once locally so we do not have to repeat the same parsing
+and column-building work every time we run Google Colab. Colab sessions can
+restart, disconnect, or run slowly when doing extra preprocessing. By saving a
+ready-to-train CSV ahead of time, later notebooks can load the top-five columns
+directly and spend their compute on training and evaluation instead of
+re-cleaning the same data.

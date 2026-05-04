@@ -1,0 +1,11 @@
+source,target,prediction,exact_match
+أَجِزّ,2ajjiz,2ajjiz,True
+يَوحِل,ywa77il,ywa77il,True
+خُمَرْجي,khamarji,khamarji,True
+شِيد,shayyid,shayyad,False
+يِزْرَم,yizram,yizram,True
+مِسْك,masak,massak,False
+يْرَهْرِط,yrahrit,yrahrit,True
+شَغَّلهَا تِجَارِي,shughilha tijaari,shughulha tijaari,False
+شَيَّذ,shayyidh,shayyidh,True
+عُشُش,3ashshish,3ashshish,True

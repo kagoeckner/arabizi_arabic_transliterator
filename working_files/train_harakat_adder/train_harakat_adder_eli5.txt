@@ -1,0 +1,15 @@
+Train Harakat Adder ELI5
+
+This model is a "harakat adder." Its job is to take Arabic text with the vowel marks removed and predict the same Arabic text with harakat added back in. In simple terms, it is like a careful autocomplete system for Arabic diacritics. The input column is arabic_stripped, which is the plain Arabic text, and the target column is arabic_harakat, which is the fully marked answer. The model learns by seeing many examples of stripped text paired with the correct marked version.
+
+The data comes from maknuune-v1.0.1_cleaned.csv. In the local copy, the cleaned file has 36,302 rows. The notebook shuffles the rows with a fixed random seed, then uses about 80% for training, 10% for validation, and 10% for testing. The training split is what the model learns from. The validation split is checked after each epoch to see whether the model is improving. The test split is kept separate for later evaluation.
+
+The model is built as a character-level encoder-decoder Transformer. "Character-level" means it does not predict whole words at once. Instead, it reads and writes one character at a time. The encoder reads the stripped Arabic input and builds a contextual understanding of the sequence. The decoder then generates the harakat version character by character while looking back at the encoded input. This setup treats diacritization like translation: translate from unmarked Arabic into marked Arabic.
+
+The Transformer uses embeddings of size 192, 6 attention heads, 4 encoder layers, 4 decoder layers, and a feedforward size of 768. Dropout is set to 0.15 to help prevent memorization. Training uses AdamW with weight decay, gradient clipping, and a OneCycle learning-rate schedule. The notebook can save a checkpoint, a final model bundle called harkat_adder.pt, a metrics CSV, and graph files for learning rate, loss, and sequence error.
+
+The main metric is exact sequence accuracy. This is strict: a prediction only counts as correct if the entire output sequence matches the target, not just most of it. The metrics file records 90 training epochs. The best validation exact-sequence accuracy happened at epoch 83, reaching about 49.83%. The best validation loss happened at epoch 80, with a cross-entropy loss of about 0.266. By the final logged epoch, epoch 90, validation exact-sequence accuracy was about 49.59%, so the model was still performing near its best. Training exact-sequence accuracy reached about 56.27% at epoch 90.
+
+The length-bucket metrics show that shorter examples are much easier. Around the best epoch, validation accuracy was about 48% for very short sequences, about 57% for 10-19 character sequences, and much lower for longer sequences. That makes sense: every extra character is another chance to make one small mistake, and exact-sequence accuracy gives no partial credit.
+
+Overall, this model learns a useful Arabic diacritization task. It can take plain Arabic text and propose a harakat-marked version. Its strongest results are on short and medium-length items, while long sequences remain harder. The saved plots help show how learning rate, loss, and sequence error changed during training.

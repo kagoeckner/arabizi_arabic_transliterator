@@ -1,8 +1,3 @@
-# Presentation folders
-hackathon_presentation/
-academic_presentation/
-working_files/
-
 # Local agent/session files
 .codex
 local.html

@@ -1,0 +1,144 @@
+train_arabic_wo_harakat_to_arabizi.ipynb trains a character-level Transformer
+model that converts Arabic without harakat into Arabizi.
+
+In simple terms, this experiment asks:
+
+How well can the model write Arabizi when it only sees plain Arabic letters and
+does not get the short vowel marks?
+
+The training source column is:
+
+arabic_stripped
+
+The 1k softmax/top-k validation source column is also:
+
+arabic_stripped
+
+The target column is:
+
+arabizi
+
+This makes the experiment a clean no-harakat baseline. Unlike the
+Arabic-with-harakat model, this model never sees the vowel marks during
+training. It has to learn the most likely Arabizi spelling from the stripped
+Arabic letters alone.
+
+The notebook reads:
+
+maknuune-v1.0.1_cleaned_predictions_top_5.csv
+
+When run in Google Colab, it expects that file in:
+
+/content/drive/MyDrive/arabizi/
+
+It saves outputs under the train_arabic_wo_harakat_to_arabizi results folder.
+For this recent local run, the result files were saved under:
+
+working_files/train_arabic_wo_harakat_to_arabizi_files/train_arabic_wo_harakat_to_arabizi_files/
+
+Recent run results
+------------------
+
+The model trained for 100 epochs. The best validation checkpoint happened
+around epoch 88.
+
+On the normal test set, where the model receives stripped Arabic and predicts
+Arabizi, the model got:
+
+- Test exact sequence accuracy: 47.4%
+- Test exact matches: 1,635 out of 3,451 examples
+- Final validation token accuracy: 88.7%
+- Final validation exact sequence accuracy: 46.7%
+- Best validation exact sequence accuracy: 47.1% at epoch 88
+
+The important distinction is token accuracy versus sequence accuracy. Token
+accuracy counts individual characters, so a prediction can score well even if a
+few characters are wrong. Sequence accuracy is stricter: the whole Arabizi
+answer must be exactly right. For transliteration, exact sequence accuracy is
+usually the more meaningful number.
+
+Performance by length
+---------------------
+
+The model did much better on short words than on longer expressions:
+
+- Source length 0-9 characters: 50.2% exact accuracy
+- Source length 10-19 characters: 1.7% exact accuracy
+- Source length 20+ characters: 0% exact accuracy in this run
+
+Target length shows the same pattern:
+
+- Target length 0-9 characters: 50.8% exact accuracy
+- Target length 10-19 characters: 31.4% exact accuracy
+- Target length 20+ characters: 0% exact accuracy in this run
+
+This makes sense because stripped Arabic removes pronunciation clues. For a
+short word, the model can often guess the common Arabizi spelling. For longer
+phrases, there are many more chances to choose a wrong vowel, doubled consonant,
+space, or spelling variant, and one mistake makes the full sequence incorrect.
+
+1k softmax/top-k validation
+---------------------------
+
+The notebook also ran the required 1,000-example softmax-90 top-k validation
+from Arabic without harakat to Arabizi.
+
+The 1k top-k results were:
+
+- Top-1 accuracy: 46.5% (465 out of 1,000)
+- Top-3 accuracy: 75.1% (751 out of 1,000)
+- Top-5 accuracy: 82.6% (826 out of 1,000)
+- Top-10 accuracy: 87.4% (874 out of 1,000)
+
+This means the model's first guess was right a little under half the time, but
+the correct answer was usually somewhere in its candidate list. By top-10, the
+correct Arabizi spelling appeared for 87.4% of the sampled examples.
+
+The top-k results were also strongly length-dependent:
+
+- Source length 0-9: top-1 was 49.6%, top-10 was 92.9%
+- Source length 10-19: top-1 was 1.7%, top-10 was 6.8%
+- Longer source lengths: 0 exact hits in this sample
+
+So the model is useful for short stripped-Arabic words, especially if the app
+can show multiple candidate spellings. It is much weaker for longer phrases.
+
+What this tells us
+------------------
+
+This no-harakat model learned the stripped-Arabic task much better than forcing
+the harakat-trained model to operate without harakat. In the previous ablation,
+the harakat-trained model only reached 8.4% top-1 accuracy on stripped Arabic.
+This stripped-trained model reached 46.5% top-1 on the 1k stripped-Arabic
+validation.
+
+However, it still performs far below the Arabic-with-harakat model in exact
+test accuracy. The harakat-aware model reached about 83.1% exact accuracy,
+while this no-harakat model reached 47.4%.
+
+The takeaway is:
+
+Training directly on stripped Arabic helps a lot when harakat are unavailable,
+but harakat still carry important pronunciation information. Without harakat,
+the model can often produce good candidate lists for short words, but it loses
+many exact spellings because the missing vowel information makes the task more
+ambiguous.
+
+Important saved files
+---------------------
+
+The main saved model files are:
+
+train_arabic_wo_harakat_to_arabizi.pt
+train_arabic_wo_harakat_to_arabizi_best.pt
+train_arabic_wo_harakat_to_arabizi_checkpoint.pt
+
+The main report files are:
+
+train_arabic_wo_harakat_to_arabizi_metrics.csv
+train_arabic_wo_harakat_to_arabizi_metrics_by_length.csv
+train_arabic_wo_harakat_to_arabizi_error_analysis_by_length.csv
+train_arabic_wo_harakat_to_arabizi_error_analysis_details.csv
+train_arabic_wo_harakat_to_arabizi_top_k_metrics.csv
+train_arabic_wo_harakat_to_arabizi_top_k_metrics_by_length.csv
+train_arabic_wo_harakat_to_arabizi_arabizi_predictions_softmax_90.csv

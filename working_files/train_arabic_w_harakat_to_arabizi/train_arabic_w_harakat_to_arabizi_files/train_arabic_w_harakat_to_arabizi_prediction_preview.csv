@@ -1,0 +1,11 @@
+source,target,prediction,exact_match
+اِتْحَوَّط,2it7awwat,2it7awwat,True
+مُغْتَرِب,mughtarib,mughtarib,True
+يِنْسَدّ,yinsadd,yinsadd,True
+اِتْلَصَّص,2itlassas,2itlassas,True
+فَسْفَس,fasfas,fasfas,True
+عُضُو,3udu,3udu,True
+اِنْقَطَع الخَيط وفَرْطَت المِسْبَحَة,2inqata3il kheet wfartat 2ilmisba7a,2inqata3 2ilmata7 wilfartakha bista,False
+يِتْفَرَّك,yitfarrak,yitfarrak,True
+أَنْهَى,2anha,2anha,True
+يُنْطُر,yuntur,yuntur,True

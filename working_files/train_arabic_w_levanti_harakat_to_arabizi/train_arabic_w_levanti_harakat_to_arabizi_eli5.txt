@@ -1,0 +1,104 @@
+Train Arabic With Levanti Harakat To Arabizi
+
+This notebook trains a Transformer to turn Arabic script back into Arabizi. The special twist is that the Arabic input is not plain stripped Arabic and it is not the gold harakat from the dataset. Instead, it uses Levanti harakat that were predicted by the off-the-shelf Hugging Face Levanti diacritizer.
+
+In simple terms:
+
+1. Another notebook starts with Arabic without harakat and guesses Levanti-style harakat.
+2. This notebook takes those guessed-harakat Arabic strings.
+3. It trains a model to translate them into Arabizi.
+4. It saves model checkpoints, metrics, error checks, top-k predictions, and charts.
+
+The input data file is:
+
+maknuune-v1.0.1_cleaned_levanti_harakat_predictions.csv
+
+The model learns this direction:
+
+levanti_harakat_prediction -> arabizi
+
+This tests a useful project question: if we add automatically predicted Levanti harakat before translating back to Arabizi, does that give the model extra pronunciation clues compared with using Arabic without harakat?
+
+The notebook used 36,302 raw rows. After removing blank values and duplicate source/target pairs, it had 34,498 usable examples. The split was:
+
+Training rows: 27,598
+Validation rows: 3,449
+Test rows: 3,451
+
+During training, the encoder reads the Levanti-harakat Arabic characters. The decoder writes Arabizi characters one at a time. The model reports token accuracy and sequence accuracy.
+
+Token accuracy asks: how many individual output characters were correct?
+
+Sequence accuracy asks: how many full Arabizi strings were exactly correct?
+
+Sequence accuracy is much stricter, because one wrong character makes the whole row count as wrong.
+
+The training ran for 98 epochs. At the final epoch, the model had:
+
+Training loss: about 0.2523
+Training token accuracy: about 90.75%
+Training sequence accuracy: about 50.78%
+Validation loss: about 0.3118
+Validation token accuracy: about 89.44%
+Validation sequence accuracy: about 49.32%
+
+The best validation sequence accuracy also happened at epoch 98, at about 49.32%. The lowest validation loss happened earlier, at epoch 86, with validation loss about 0.3117 and validation sequence accuracy about 48.94%.
+
+On the final test set, greedy exact-match error analysis found:
+
+Test rows: 3,451
+Correct full Arabizi strings: 1,731
+Incorrect full Arabizi strings: 1,720
+Test sequence accuracy: about 50.16%
+Test error rate: about 49.84%
+
+The model did best on short inputs. By Levanti-harakat source length:
+
+0-9 characters: 1,356 correct out of 2,672, about 50.75%
+10-19 characters: 375 correct out of 671, about 55.89%
+20+ characters: almost all exact-match scores were 0%
+
+By Arabizi target length:
+
+0-9 characters: 1,598 correct out of 2,985, about 53.53%
+10-19 characters: 133 correct out of 382, about 34.82%
+20+ characters: 0% exact-match accuracy
+
+That length pattern makes sense. A longer word or phrase has more chances for one character to be wrong, and exact-match scoring gives no partial credit.
+
+The notebook also ran softmax 90 top-k evaluation on 1,000 sampled test rows. Instead of keeping only the single best Arabizi output, this check keeps several likely candidates and asks whether the correct Arabizi answer appears in the top k.
+
+Overall softmax 90 top-k results:
+
+Top-1: 506 out of 1,000, or 50.60%
+Top-3: 781 out of 1,000, or 78.10%
+Top-5: 840 out of 1,000, or 84.00%
+Top-10: 886 out of 1,000, or 88.60%
+
+This is the most encouraging result. The model's single best guess is exactly right about half the time, but the correct answer is often nearby in the candidate list. By top-10, the correct Arabizi answer appears almost 89% of the time in the sampled evaluation.
+
+Some example predictions:
+
+source: اِكْدَح
+target: 2ikda7
+prediction: 2ikda7
+This one is exactly correct.
+
+source: بطْرخ
+target: batrakh
+prediction: batrakh
+This one is also exactly correct.
+
+source: زَرْزَب
+target: zarzib
+prediction: zarzab
+This is close, but one vowel choice is different, so exact-match scoring counts it as wrong.
+
+source: مِقْلَب
+target: maqlab
+prediction: mqallib
+This is not an exact match, showing that the model can still choose a different Arabizi spelling even when the Arabic input has predicted harakat.
+
+The main takeaway is that using predicted Levanti harakat creates a useful Arabizi model, especially for short examples. Greedy exact-match accuracy is about 50% on the test set, while top-k evaluation shows the model often has the right answer among its likely guesses. The predicted harakat are helpful as pronunciation hints, but because they are automatically generated and sometimes wrong, they are not as clean as gold harakat from the dataset.
+
+The notebook saved the usual project artifacts: metrics CSVs, length/error analysis CSVs, softmax top-k outputs, prediction previews, model checkpoints, the best model, the final model, and PNG/PDF charts for loss, sequence error, learning rate, error by length, counts by length, and top-k accuracy.

@@ -1,0 +1,33 @@
+Harakat Prediction Maker Script
+
+This notebook takes the trained harakat adder model and uses it to make predictions on the cleaned Arabic data. The training notebook teaches the model how to add harakat. This notebook answers the next question: when the model sees Arabic text without harakat, what marked version does it predict, and how often is the correct answer included?
+
+The input data comes from maknuune-v1.0.1_cleaned.csv. The important input column is arabic_stripped, which contains Arabic text with the vowel marks removed. The target column is arabic_harakat, which contains the correct version with harakat included. The notebook loads the saved model bundle, harkat_adder.pt, which includes the learned Transformer weights, vocabulary mappings, and configuration needed to rebuild the same model architecture used during training.
+
+The script first decides whether it is running in Google Colab or locally. In Colab, it uses the arabizi folder in Google Drive. Locally, it uses the project folders, including working_files/data for the cleaned data and models/harkat_adder.pt for the model. This makes the same notebook usable both for long prediction runs in Drive and for local project testing.
+
+After loading the model, the notebook rebuilds the same character-level encoder-decoder Transformer from training. The encoder reads the stripped Arabic sequence. The decoder generates the marked Arabic sequence one character at a time. The helper functions clean text, turn characters into vocabulary IDs, and turn predicted IDs back into readable Arabic text.
+
+The main prediction method is threshold-based beam search. Instead of taking only the single most likely next character at each step, the script keeps several possible output paths. The beam width is 5, so it keeps the five strongest candidate sequences overall. At each character step, it expands enough next-token choices to cover 90% of the model's softmax probability mass, with a cap of 10 choices. This matters because Arabic diacritization can be ambiguous: two different harakat patterns may both be plausible, and the correct answer may not always be the single highest-probability output.
+
+The notebook saves five prediction-related columns:
+
+harakat_predictions_softmax_90 stores the candidate predictions as JSON.
+harakat_top_prediction stores the highest-probability prediction.
+harakat_top_probability stores the probability score for that top prediction.
+harakat_top_log_probability stores the same confidence as a log probability.
+harakat_prediction_done_at records when the row was completed.
+
+The prediction loop is resumable. If a saved predictions file already exists, the notebook loads it and skips rows that already have predictions. It also saves progress every 100 rows. This is useful because running predictions across the full dataset can take a long time, especially in Colab where sessions can disconnect.
+
+After generating predictions, the notebook evaluates performance. It calculates two main accuracy measures. Top-1 exact accuracy asks whether harakat_top_prediction exactly matches arabic_harakat. This is the strictest metric because one wrong diacritic makes the whole row incorrect. Target-in-softmax-90 accuracy asks whether the correct arabic_harakat answer appears anywhere in the saved candidate list from the 90% softmax beam search. This second metric is less strict, but it is important because it shows whether the model considered the right answer even when it did not rank it first.
+
+The metrics by length show that the prediction notebook performed strongly overall, especially on short examples. Across all 36,302 rows, the top-1 exact accuracy was about 64.53%. The correct answer appeared somewhere in the softmax-90 candidate list about 94.99% of the time. That means the model's first choice was exactly right for nearly two thirds of all rows, and the correct answer was usually present among its candidate predictions.
+
+Performance changed clearly with source length. For 0-9 character inputs, which made up most of the dataset with 34,072 rows, top-1 exact accuracy was about 64.88%, and target-in-softmax-90 accuracy was about 96.11%. For 10-19 character inputs, top-1 exact accuracy stayed fairly strong at about 61.81%, while target-in-softmax-90 accuracy dropped to about 80.30%. For 20-29 character inputs, top-1 exact accuracy was about 48.24%, and target-in-softmax-90 accuracy was about 70.59%.
+
+The longest buckets were much harder, but they also had far fewer examples. For 30-39 character inputs, the model reached about 35.94% top-1 exact accuracy and 53.13% target-in-softmax-90 accuracy across 64 rows. For 40-49 characters, it reached about 36.36% on both metrics across 11 rows. For 50-59 characters, top-1 exact accuracy was 25.00%, and target-in-softmax-90 accuracy was 37.50% across 8 rows. The 60-69 and 70-79 buckets each had only 2 rows and scored 0.00%, so those results should be interpreted carefully because the sample sizes are tiny.
+
+This length pattern makes sense. The model predicts character by character, and exact-match scoring gives no partial credit. A longer phrase has more positions where the model can make one small mistake, so exact accuracy naturally falls as input length increases. The softmax-90 metric shows a more encouraging picture: even when the top prediction is wrong, the correct answer is often still in the candidate set, especially for short and medium examples.
+
+Overall, this notebook turns the trained harakat model into a practical prediction pipeline. It loads the saved model, generates multiple candidate harakat versions for each stripped Arabic input, saves the results in a resumable way, and measures how well the model performs by length. The results show that the model is most reliable on short Arabic strings, still useful on medium strings, and weaker on longer phrases where exact character-level agreement becomes much harder.

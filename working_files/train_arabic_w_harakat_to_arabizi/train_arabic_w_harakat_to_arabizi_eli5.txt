@@ -1,0 +1,135 @@
+train_arabic_w_harakat_to_arabizi.ipynb trains a character-level Transformer
+model that converts Arabic-with-harakat into Arabizi. In simple terms, this
+experiment asks:
+
+If the model can see the short vowel marks and other harakat, does it become
+better at guessing the intended Arabizi spelling?
+
+The training source column is:
+
+arabic_harakat
+
+The target column is:
+
+arabizi
+
+This is different from the stripped-Arabic setting because Arabic without
+harakat hides a lot of pronunciation information. For example, the same Arabic
+letters can often be read with different vowels, but Arabizi usually writes
+those vowels out. Harakat give the model extra clues about sounds that are not
+visible in stripped Arabic.
+
+The notebook reads:
+
+maknuune-v1.0.1_cleaned_predictions_top_5.csv
+
+When run in Google Colab, it expects that file in:
+
+/content/drive/MyDrive/arabizi/
+
+It saves all outputs under:
+
+/content/drive/MyDrive/arabizi/train_arabic_w_harakat_to_arabizi_files/
+
+Locally, the same output structure is created relative to the project or
+working_files directory.
+
+The model was trained for 100 epochs using the same general setup as the other
+Transformer transliteration notebooks: an 80/10/10 split, character-level
+input/output vocabularies, checkpointing, learning-rate scheduling, and
+sequence-level evaluation. The best validation checkpoint occurred around epoch
+87.
+
+Recent run results
+------------------
+
+On the normal test set, where the model receives Arabic with harakat, the model
+performed strongly:
+
+- Test exact sequence accuracy: 83.1%
+- Test exact matches: 2,896 out of 3,484 examples
+- Final validation token accuracy: 94.8%
+- Final validation exact sequence accuracy: 82.6%
+- Best validation exact sequence accuracy: 82.8% at epoch 87
+
+This means the model usually gets the entire Arabizi answer exactly right, not
+just most of the characters. Token accuracy is higher because many wrong
+predictions are still close to the target, but exact sequence accuracy is the
+stricter and more important metric for transliteration output.
+
+Performance by length shows the model is much better on short words than on
+longer phrases:
+
+- Source length 0-9 characters: 90.1% exact accuracy
+- Source length 10-19 characters: 66.9% exact accuracy
+- Source length 20+ characters: near 0% exact accuracy in this run
+
+This pattern makes sense. Short words are easier because the model has fewer
+decisions to make. Long phrases are harder because one bad character, missing
+space, or wrong word makes the whole sequence count as incorrect.
+
+1k stripped-Arabic test
+----------------------
+
+After training the model on arabic_harakat, the notebook also ran a special
+1,000-example softmax-90 top-k evaluation where the input source was changed to:
+
+arabic_stripped
+
+This means the trained model was forced to translate Arabic without harakat,
+even though it learned from Arabic with harakat.
+
+The 1k stripped-input results were:
+
+- Top-1 accuracy: 8.4%  (84 out of 1,000)
+- Top-3 accuracy: 16.8% (168 out of 1,000)
+- Top-5 accuracy: 22.0% (220 out of 1,000)
+- Top-10 accuracy: 30.9% (309 out of 1,000)
+
+So, when harakat were removed, performance dropped sharply. With harakat, the
+model got about 83% of full test examples exactly right. Without harakat, its
+first guess was correct only 8.4% of the time on the 1k top-k evaluation, and
+even allowing up to 10 guesses only reached 30.9%.
+
+That drop is the main takeaway from this experiment. It suggests that the
+harakat are not just decoration. They carry useful pronunciation information
+that helps the model choose the correct Arabizi vowels, consonant doubling, and
+word shape.
+
+The stripped 1k results were also length-sensitive:
+
+- For source length 0-9, top-1 was 8.8% and top-10 was 32.4%
+- For source length 10-19, top-1 was 2.0% and top-10 was 6.1%
+- For longer source lengths, the model got 0 exact matches in this sample
+
+In plain English: removing harakat hurts everywhere, but it hurts longer inputs
+especially badly.
+
+Important saved files
+---------------------
+
+The main saved model files are:
+
+train_arabic_w_harakat_to_arabizi.pt
+train_arabic_w_harakat_to_arabizi_best.pt
+train_arabic_w_harakat_to_arabizi_checkpoint.pt
+
+The main report files are:
+
+train_arabic_w_harakat_to_arabizi_metrics.csv
+train_arabic_w_harakat_to_arabizi_metrics_by_length.csv
+train_arabic_w_harakat_to_arabizi_error_analysis_by_length.csv
+train_arabic_w_harakat_to_arabizi_error_analysis_details.csv
+train_arabic_w_harakat_to_arabizi_top_k_metrics_from_stripped.csv
+train_arabic_w_harakat_to_arabizi_top_k_metrics_by_length_from_stripped.csv
+train_arabic_w_harakat_to_arabizi_arabizi_predictions_softmax_90_from_stripped.csv
+
+Report takeaway
+---------------
+
+This experiment supports the argument for keeping a harakat-aware pathway in
+the project. When the model sees Arabic with harakat, it performs well on normal
+word-level transliteration. When those marks are removed, performance collapses
+on the 1k stripped-input evaluation. That comparison is useful evidence that
+harakat preserve transliteration information that stripped Arabic does not fully
+contain.

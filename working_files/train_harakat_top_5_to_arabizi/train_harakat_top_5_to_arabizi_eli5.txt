@@ -1,0 +1,136 @@
+train_harakat_top_5_to_arabizi.ipynb trains a character-level Transformer model
+that converts Arabic-with-harakat candidate strings into Arabizi. The model's
+source is not just one Arabic form. Instead, the notebook uses the five columns
+created by the top-five harakat cleaning notebook:
+
+harakat_prediction_1
+harakat_prediction_2
+harakat_prediction_3
+harakat_prediction_4
+harakat_prediction_5
+
+Each of those columns contains one possible Arabic spelling with harakat marks.
+The target column is arabizi. The purpose is to teach the model to recover the
+Arabizi form even when the harakat-restoration model gives several plausible
+Arabic-with-harakat candidates. In other words, this notebook is a bridge from
+the harakat prediction stage back into Arabizi. It is useful because the earlier
+harakat model may be uncertain, and the correct transliteration may still be
+recoverable from one of the top candidates.
+
+The notebook starts by reading maknuune-v1.0.1_cleaned_predictions_top_5.csv.
+When run in Google Colab, it expects that file in:
+
+/content/drive/MyDrive/arabizi/
+
+It also saves all outputs under:
+
+/content/drive/MyDrive/arabizi/train_harakat_top_5_to_arabizi_files/
+
+Locally, the same output structure appears under the notebook's folder. The
+notebook expands the dataset by stacking the five harakat prediction columns
+into one source column called harakat_source. This means one original row can
+become up to five training examples, all sharing the same Arabizi target. After
+empty values and duplicate rows are removed, the data is shuffled and split into
+training, validation, and test sets.
+
+The model itself is a compact encoder-decoder Transformer that works at the
+character level. Character-level modeling is a good fit here because both
+Arabic-with-harakat and Arabizi depend heavily on individual letters, marks, and
+small spelling changes. The encoder reads the harakat_source string, and the
+decoder generates the Arabizi output one character at a time. The notebook
+builds separate source and target character vocabularies, pads batches, trains
+with cross-entropy loss, and tracks both token accuracy and strict sequence
+accuracy. Token accuracy measures how often individual characters are right.
+Sequence accuracy is stricter: the whole generated Arabizi string must match
+the target exactly. If one character or space is wrong, that row counts as an
+incorrect sequence.
+
+The trainer is designed for Colab reliability. It saves a checkpoint every
+epoch, saves a best model whenever validation sequence accuracy improves, and
+saves periodic .pt snapshots every five epochs. The main saved model files are:
+
+train_harakat_top_5_to_arabizi.pt
+train_harakat_top_5_to_arabizi_best.pt
+train_harakat_top_5_to_arabizi_checkpoint.pt
+
+It also writes training metrics, progress logs, length-based metrics, error
+analysis files, softmax-90 predictions, top-k metrics, and plots. The plots
+include loss, sequence error, learning rate, error by source length, error by
+target length, example counts by length, overall top-k accuracy, and top-k
+accuracy by length.
+
+The training metrics CSV is the main file for watching learning over time. It
+records one row per epoch, including train loss, validation loss, token
+accuracy, sequence accuracy, elapsed seconds, and learning rate. The progress
+CSV is simpler: it records when checkpoints were saved. The metrics-by-length
+CSV breaks validation and test sequence accuracy into buckets such as 0-9,
+10-19, and 20-29 characters. This matters because an average score can hide the
+fact that short words, medium phrases, and long phrases behave differently. The
+error-analysis files go one step further by saving row-level predictions and
+summary tables, so it is possible to inspect which examples failed and whether
+failures are concentrated in longer or more complex strings.
+
+The saved local run completed 100 epochs. The best validation model was saved
+at epoch 98. At that point, validation loss was 0.1152, validation token
+accuracy was 95.39%, and validation sequence accuracy was 63.78%. The final
+epoch, epoch 100, was very close: validation loss was 0.1152, validation token
+accuracy was 95.39%, and validation sequence accuracy was 63.72%. The final
+saved model's test metrics were also strong: test loss was 0.1184, test token
+accuracy was 95.39%, and strict test sequence accuracy was 64.09%. This means
+the model gets most individual Arabizi characters right and produces a fully
+exact Arabizi string for roughly 64 out of every 100 test examples.
+
+The error analysis shows that length matters. On the final test split, short
+examples with target length 0-9 reached about 62.90% sequence accuracy, while
+target length 10-19 reached about 76.37%. Longer examples were harder: target
+length 20-29 was about 57.09%, target length 30-39 was about 29.49%, and target
+length 40-49 was about 28.57%. This is expected because longer sequences give
+the model more chances to make at least one character-level mistake, and strict
+sequence accuracy punishes even small errors.
+
+The source-length analysis tells a similar story. Source strings with length
+0-9 reached about 61.49% exact-match accuracy, while source strings with length
+10-19 reached about 76.25%. Accuracy dropped for longer sources: 20-29 reached
+about 57.98%, 30-39 reached about 37.93%, and 40-49 reached about 18.18%.
+Those results suggest the model is already strong on ordinary short and medium
+entries, but long multi-word phrases remain the main area for improvement. This
+is a useful diagnostic because future work can target long examples directly,
+for example by adding more long-sequence training data, using a larger model,
+or evaluating candidate lists instead of only the greedy output.
+
+The notebook also performs a softmax-90 style generation evaluation on 1,000
+sampled rows. This produces a list of possible Arabizi outputs instead of only
+one greedy answer. The top-k results are important because an application can
+show or rerank several options. In the saved run, the correct Arabizi target
+appeared in the top 1 prediction 65.4% of the time, in the top 3 predictions
+92.2% of the time, in the top 5 predictions 96.7% of the time, and in the top
+10 predictions 98.3% of the time. This is a major result: even when the single
+best output is not exact, the correct answer is usually somewhere in the model's
+short candidate list.
+
+The softmax-90 output file is therefore not just an evaluation artifact. It is
+also a practical product of the model. Each row stores possible Arabizi strings
+with probability-like scores and log probabilities. A downstream interface
+could show these candidates to a user, or another model could choose among
+them. The gap between top-1 accuracy and top-10 coverage is especially
+important: top-1 exact match is about 65%, but top-10 contains the correct
+answer more than 98% of the time on the sampled evaluation. That means the
+model's search space is usually finding the right answer, even when its first
+choice is not always perfect.
+
+Overall, this notebook's purpose is to make the transliteration pipeline more
+robust. Instead of trusting only one harakat prediction, it trains on the top
+five harakat possibilities and learns how to map those possible Arabic forms
+back to Arabizi. The model is useful as a production component because it saves
+portable .pt bundles, records reproducible metrics, produces diagnostic plots,
+and gives top-k candidate lists that can support downstream selection,
+reranking, or human review.
+
+In the larger project, this model helps connect the Arabic and Arabizi sides of
+the system. The harakat adder focuses on adding diacritics to Arabic. This
+trainer asks a different question: if we have several vocalized Arabic
+candidates, can we recover the Arabizi spelling that belongs with them? The
+saved results suggest yes, especially when the application can use a short list
+of candidates instead of only one answer. That makes the model valuable both as
+an evaluator of harakat candidates and as a generator of plausible Arabizi
+forms for real transliteration workflows.

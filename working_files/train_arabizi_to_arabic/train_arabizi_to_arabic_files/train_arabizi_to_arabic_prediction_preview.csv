@@ -1,0 +1,11 @@
+source,target,prediction,exact_match
+zarzib,زرزب,زرزب,True
+2il kikh 2akhu 2ilkhara,الكخ أخو الخرا,الخ إخالكر,False
+maqlab,مقلب,مقلب,True
+2ikda7,اكدح,اكدح,True
+batrakh,بطرخ,بطرخ,True
+ya22is,يئس,يؤئس,False
+qa7at,قحط,قحط,True
+jariimit sharaf,جريمة شرف,جريمة شراف,False
+waffiq,وفق,وفق,True
+7izib,حزب,حذب,False

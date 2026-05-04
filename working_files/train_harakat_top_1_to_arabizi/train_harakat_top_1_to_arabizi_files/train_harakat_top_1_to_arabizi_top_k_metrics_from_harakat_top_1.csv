@@ -1,0 +1,5 @@
+k,total,hits,top_k_accuracy,length_type,length_bucket,evaluation_source_col
+1,1000,505,0.505,overall,all,harakat_top_prediction
+3,1000,761,0.761,overall,all,harakat_top_prediction
+5,1000,821,0.821,overall,all,harakat_top_prediction
+10,1000,875,0.875,overall,all,harakat_top_prediction

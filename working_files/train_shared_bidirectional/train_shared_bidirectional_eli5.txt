@@ -1,0 +1,139 @@
+train_shared_bidirectional.ipynb trains one shared character-level Transformer that
+tries to handle both transliteration directions:
+
+Arabic script -> Arabizi
+Arabizi -> Arabic script without harakat
+
+In plain terms, this notebook asks whether one model can learn both jobs at the
+same time. The earlier notebooks mostly trained one model for one direction.
+This one combines the two directions into a single training set and gives each
+example a direction token. The direction token tells the model what kind of
+answer it should produce:
+
+<TO_ARABIZI> means the model should write Arabizi.
+<TO_ARABIC> means the model should write Arabic script.
+
+This is like giving the same student two kinds of flashcards. Some flashcards
+show Arabic and ask for Arabizi. Other flashcards show Arabizi and ask for
+Arabic. The student sees a label at the start of the card telling them which
+direction to answer in.
+
+The notebook reads maknuune-v1.0.1_cleaned.csv. In Google Colab, it expects the
+file to be in:
+
+/content/drive/MyDrive/arabizi/
+
+It saves outputs in:
+
+/content/drive/MyDrive/arabizi/train_shared_bidirectional_files/
+
+Locally, the same output folder is:
+
+working_files/train_shared_bidirectional/train_shared_bidirectional_files/
+
+The source data has three important columns. The arabizi column contains the
+Latin-letter and number spelling. The arabic_stripped column contains Arabic
+script without harakat. The arabic_harakat column exists in the dataset, but
+this shared bidirectional model does not use Arabic with harakat as its main
+target. For the Arabic side, it uses stripped Arabic. That means the
+Arabizi-to-Arabic direction produces Arabic without harakat, and the
+Arabic-to-Arabizi direction starts from Arabic without harakat.
+
+The notebook turns each original row into two possible training examples. One
+example goes from arabizi to arabic_stripped. The other goes from
+arabic_stripped to arabizi. After cleaning, deduplication, shuffling, and
+splitting, the saved run had 58,082 training rows, 7,260 validation rows, and
+7,262 test rows. The model uses shared source and target vocabularies with
+direction tokens so that one checkpoint can support both directions.
+
+The model itself is an encoder-decoder Transformer. It works at the character
+level, meaning it reads and writes individual characters instead of whole
+words. That is useful for Arabizi because spelling details matter: numbers such
+as 3 and 7 can represent Arabic sounds, vowels can be written many ways, and
+different people may spell the same word differently. A character-level model
+can learn those small spelling patterns directly.
+
+The encoder reads the input string plus the direction instruction. The decoder
+then generates the output string one character at a time. During training, the
+model is scored with cross-entropy loss. The notebook tracks token accuracy and
+sequence accuracy. Token accuracy asks how many individual characters were
+right. Sequence accuracy is stricter: the whole output must exactly match the
+target. If one character is wrong, the whole example counts as incorrect.
+
+The saved architecture was a compact Transformer with d_model 192, 8 attention
+heads, 3 encoder layers, 3 decoder layers, feedforward size 512, dropout 0.15,
+batch size 128, and learning rate 0.0003. It trained for 100 epochs with
+checkpoints and periodic snapshots. The main saved model files are:
+
+train_shared_bidirectional.pt
+train_shared_bidirectional_best.pt
+train_shared_bidirectional_checkpoint.pt
+
+It also saves epoch metrics, progress logs, length-based metrics, error
+analysis files, prediction previews, softmax-90 candidate predictions, top-k
+metrics, and plots. The plots show loss, sequence error, learning rate, top-k
+accuracy, and error by source and target length. These artifacts are important
+because the shared model was mainly an experiment: the project needed to show
+that a bidirectional approach was tried and evaluated, not just assumed.
+
+The best validation checkpoint was saved at epoch 78, with validation sequence
+accuracy of about 57.25%. The final test results were:
+
+Test loss: 0.3270
+Test token accuracy: 88.76%
+Overall test sequence accuracy: 57.55%
+Arabic-to-Arabizi sequence accuracy: 45.08%
+Arabizi-to-Arabic sequence accuracy: 70.01%
+
+These results show that the shared model learned both directions, but it did
+not learn them equally well. The Arabizi-to-Arabic direction was much stronger.
+That makes sense because Arabizi often includes useful pronunciation clues,
+such as Latin vowels or numerals for Arabic sounds. Arabic-to-Arabizi is harder
+because ordinary Arabic without harakat hides short vowels and other
+pronunciation information that Arabizi often writes explicitly.
+
+The top-k evaluation gives a more forgiving view. Instead of asking only
+whether the first prediction is correct, it asks whether the correct answer
+appears somewhere in the model's candidate list. On a 1,000-row sampled
+softmax-90 evaluation, the shared model reached:
+
+Arabic-to-Arabizi top 1: 46.68%
+Arabic-to-Arabizi top 3: 70.59%
+Arabic-to-Arabizi top 5: 76.85%
+Arabic-to-Arabizi top 10: 79.70%
+
+Arabizi-to-Arabic top 1: 75.48%
+Arabizi-to-Arabic top 3: 86.89%
+Arabizi-to-Arabic top 5: 88.37%
+Arabizi-to-Arabic top 10: 89.22%
+
+This confirms the same pattern as the exact test results. The shared model is
+usable as a proof-of-concept baseline, especially for Arabizi-to-Arabic, but it
+is weaker than the specialized models. The dedicated Arabizi-to-Arabic model
+reached about 75.8% exact test sequence accuracy and 91.7% top-10 coverage. The
+best Arabic-to-Arabizi pipeline, which uses the custom top-five harakat stage,
+reached about 64.1% exact test sequence accuracy and 98.3% top-10 coverage.
+
+The length analysis also shows why exact matching becomes difficult. For
+Arabic-to-Arabizi, short source strings of length 0-9 reached about 47.93%
+sequence accuracy, but length 10-19 dropped to about 1.59%. For
+Arabizi-to-Arabic, short source strings of length 0-9 reached about 76.50%, but
+length 10-19 dropped to about 35.85%. Longer strings are harder because every
+extra character gives the model another chance to make one small mistake, and
+strict sequence accuracy counts any one-character error as a failed sequence.
+
+The main lesson from this notebook is that a shared bidirectional model is
+possible, but it is not the best final design for this project. It is useful as
+a baseline because it shows what happens when both directions share one
+architecture, one vocabulary setup, and one checkpoint. The model learns a real
+mapping, but the two directions have different difficulty levels. Arabic to
+Arabizi needs missing pronunciation information, while Arabizi to Arabic mostly
+normalizes an already pronunciation-rich spelling into Arabic script.
+
+In the larger project, this bidirectional run supports the argument for using
+specialized models and a pipeline. The shared model proves that the idea was
+tested. Its weaker Arabic-to-Arabizi results help explain why the final system
+uses a harakat prediction stage and preserves multiple harakat hypotheses
+before generating Arabizi. In ELI5 terms: one student can study both flashcard
+directions, but the harder direction needs extra pronunciation hints to do its
+best work.

@@ -1,0 +1,9 @@
+direction,k,total,hits,top_k_accuracy
+arabic_to_arabizi,1,527,246,0.4667931688804554
+arabic_to_arabizi,3,527,372,0.7058823529411765
+arabic_to_arabizi,5,527,405,0.7685009487666035
+arabic_to_arabizi,10,527,420,0.7969639468690702
+arabizi_to_arabic,1,473,357,0.7547568710359408
+arabizi_to_arabic,3,473,411,0.86892177589852
+arabizi_to_arabic,5,473,418,0.8837209302325582
+arabizi_to_arabic,10,473,422,0.8921775898520085
